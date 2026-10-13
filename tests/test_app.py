@@ -125,3 +125,49 @@ def test_old_database_is_migrated(tmp_path):
     assert "hcp_index" in {r[1] for r in db.execute("PRAGMA table_info(players)")}
     assert "stroke_index" in {r[1] for r in db.execute("PRAGMA table_info(courses)")}
     assert app.test_client().get("/players", headers={}).status_code == 200
+
+
+def test_play_mode_saves_hole_by_hole(client):
+    resp = client.post("/rounds/new", data={
+        "played_on": "2026-06-01", "course_name": "Neun", "pars": "4,3,4,4,4,4,4,4,4",
+        "stroke_index": "1,2,3,4,5,6,7,8,9", "round_type": "normal", "match_basis": "net",
+        "players": ["1", "2"],
+        "hcp_1": "9,0", "cr_1": "36", "slope_1": "113",
+        "hcp_2": "0", "cr_2": "36", "slope_2": "113",
+    })
+    assert resp.status_code == 302 and resp.headers["Location"].endswith("/play")
+    rid = int(resp.headers["Location"].split("/")[2])
+
+    page = client.get(f"/rounds/{rid}/play").get_data(as_text=True)
+    assert "Loch für Loch" in page and "const SAVE_URL" in page
+
+    # Loch 1: Anna (Spielvorgabe 6) 5 Schläge mit 1 Vorgabeschlag -> 2 Punkte (wird berechnet, 9 ignoriert)
+    r = client.post(f"/rounds/{rid}/holes/1", json={
+        "par": 4, "ntp": None,
+        "scores": {"1": {"strokes": 5, "putts": 2, "net_points": 9},
+                   "2": {"strokes": 4, "putts": 1, "net_points": None}},
+    })
+    assert r.status_code == 200
+    state = r.get_json()["state"]
+    assert state["scores"]["1"]["1"] == {"strokes": 5, "putts": 2, "net_points": 2}
+    # Ben: Spielvorgabe 0 + (36 − Par 35) = 1 -> ein Vorgabeschlag auf Hcp 1 -> 3 Punkte
+    assert state["scores"]["2"]["1"]["net_points"] == 3
+    assert state["round"]["auto_net"] is True
+
+    # Loch 2 ist Par 3: NTP wird gespeichert; Putts >= Schläge gibt eine Warnung
+    r = client.post(f"/rounds/{rid}/holes/2", json={
+        "ntp": 2, "scores": {"1": {"strokes": 3, "putts": 3}, "2": {"strokes": 3, "putts": 2}}})
+    data = r.get_json()
+    assert data["state"]["holes"][1]["ntp"] == 2
+    assert data["warnings"] == ["Loch 2, Anna: mehr Putts als Schläge?"]
+
+    # Ohne Lochangabe startet die Maske beim ersten offenen Loch
+    assert "let current = 3;" in client.get(f"/rounds/{rid}/play").get_data(as_text=True)
+    assert client.post(f"/rounds/{rid}/holes/99", json={}).status_code == 404
+
+
+def test_play_mode_requires_password(tmp_path):
+    app = create_app({"DATABASE": str(tmp_path / "t.sqlite"), "APP_PASSWORD": "geheim"})
+    c = app.test_client()
+    assert c.get("/rounds/1/play").status_code == 401
+    assert c.post("/rounds/1/holes/1", json={}).status_code == 401
