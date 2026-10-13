@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Runde erfassen{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Ergebnisse erfassen</h1>
+  <a href="{{ url_for('main.round_view', round_id=round.id) }}">zur Auswertung</a>
+</div>
+
+<form method="post" id="score-form">
+  <section class="card form form-row">
+    <div class="field">
+      <label for="played_on">Datum</label>
+      <input type="date" id="played_on" name="played_on" value="{{ round.played_on }}" required>
+    </div>
+    <div class="field">
+      <label for="course_name">Platz</label>
+      <input id="course_name" name="course_name" value="{{ round.course_name }}" required>
+    </div>
+    <div class="field">
+      <label for="round_type">Rundentyp</label>
+      <select id="round_type" name="round_type">
+        {% for key, label in ROUND_TYPES.items() %}<option value="{{ key }}" {% if round.round_type == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="match_basis">Lochspiel</label>
+      <select id="match_basis" name="match_basis">
+        {% for key, label in MATCH_BASES.items() %}<option value="{{ key }}" {% if round.match_basis == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field grow">
+      <label for="notes">Notiz</label>
+      <input id="notes" name="notes" value="{{ round.notes }}">
+    </div>
+  </section>
+
+  <section class="card">
+    <p class="muted small">Je Loch und Spieler: Schläge, Putts und Nettopunkte (Stableford). Bei Par-3-Löchern den Gewinner von „Nearest to the Pin“ auswählen.
+      Teilergebnisse können jederzeit gespeichert werden – gewertet wird die Runde, sobald alles erfasst ist.</p>
+    <div class="table-wrap">
+    <table class="scorecard entry">
+      <thead>
+        <tr><th rowspan="2">Loch</th><th rowspan="2">Par</th>
+          {% for p in players %}<th colspan="3" class="player-col">{{ p.name }}</th>{% endfor %}
+          <th rowspan="2">Nearest to the Pin</th></tr>
+        <tr>{% for p in players %}<th class="player-col">Schl.</th><th>Putts</th><th>Netto</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+      {% for h in holes %}
+        <tr class="{{ 'par3' if h.par == 3 }}" data-hole="{{ h.hole }}">
+          <td>{{ h.hole }}</td>
+          <td><input class="par" type="number" inputmode="numeric" min="3" max="6" name="par_{{ h.hole }}" value="{{ h.par }}" aria-label="Par Loch {{ h.hole }}"></td>
+          {% for p in players %}
+            {% set s = scores.get((p.id, h.hole), {}) %}
+            <td class="player-col"><input type="number" inputmode="numeric" min="1" max="20" name="s_{{ p.id }}_{{ h.hole }}" data-sum="s_{{ p.id }}" value="{{ s.get('strokes') if s.get('strokes') is not none }}" aria-label="Schläge {{ p.name }} Loch {{ h.hole }}"></td>
+            <td><input type="number" inputmode="numeric" min="0" max="15" name="p_{{ p.id }}_{{ h.hole }}" data-sum="p_{{ p.id }}" value="{{ s.get('putts') if s.get('putts') is not none }}" aria-label="Putts {{ p.name }} Loch {{ h.hole }}"></td>
+            <td><input type="number" inputmode="numeric" min="0" max="10" name="n_{{ p.id }}_{{ h.hole }}" data-sum="n_{{ p.id }}" value="{{ s.get('net_points') if s.get('net_points') is not none }}" aria-label="Nettopunkte {{ p.name }} Loch {{ h.hole }}"></td>
+          {% endfor %}
+          <td>
+            <select name="ntp_{{ h.hole }}" class="ntp" {% if h.par != 3 %}disabled{% endif %} aria-label="Nearest to the Pin Loch {{ h.hole }}">
+              <option value="">–</option>
+              {% for p in players %}<option value="{{ p.id }}" {% if h.ntp_player_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+            </select>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th>Σ</th><th></th>
+          {% for p in players %}
+            <th class="num player-col" data-total="s_{{ p.id }}"></th><th class="num" data-total="p_{{ p.id }}"></th><th class="num" data-total="n_{{ p.id }}"></th>
+          {% endfor %}
+          <th></th></tr>
+      </tfoot>
+    </table>
+    </div>
+  </section>
+  <div class="sticky-actions">
+    <button type="submit" class="button">Speichern</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const form = document.getElementById('score-form');
+  function recalc() {
+    const sums = {};
+    form.querySelectorAll('input[data-sum]').forEach(i => {
+      const v = parseInt(i.value, 10);
+      sums[i.dataset.sum] = (sums[i.dataset.sum] || 0) + (isNaN(v) ? 0 : v);
+    });
+    form.querySelectorAll('[data-total]').forEach(c => c.textContent = sums[c.dataset.total] || 0);
+  }
+  form.addEventListener('input', e => {
+    recalc();
+    if (e.target.classList.contains('par')) {
+      const row = e.target.closest('tr');
+      const isPar3 = e.target.value === '3';
+      row.classList.toggle('par3', isPar3);
+      const ntp = row.querySelector('select.ntp');
+      ntp.disabled = !isPar3;
+      if (!isPar3) ntp.value = '';
+    }
+  });
+  recalc();
+</script>
+{% endblock %}

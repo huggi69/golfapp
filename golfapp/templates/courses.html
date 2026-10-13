@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Plätze{% endblock %}
+{% block content %}
+<h1>Plätze</h1>
+<p class="muted">Gespeicherte Plätze füllen beim Anlegen einer Runde Name und Par-Werte automatisch aus.</p>
+<section class="card">
+  {% for c in courses %}
+    <form method="post" class="form-row course-row">
+      <input type="hidden" name="id" value="{{ c.id }}">
+      <div class="field"><label>Name</label><input name="name" value="{{ c.name }}" required></div>
+      <div class="field grow"><label>Par je Loch</label><input name="pars" value="{{ c.pars }}" required></div>
+      <div class="field"><label>Par gesamt</label><span class="pill">{{ c.pars.split(',')|map('int')|sum }}</span></div>
+      <div class="field actions">
+        <button class="button button-small" name="action" value="update">Speichern</button>
+        <button class="button button-small button-danger" name="action" value="delete" formnovalidate onclick="return confirm('Platz löschen?');">Löschen</button>
+      </div>
+    </form>
+  {% else %}
+    <p class="muted">Noch keine Plätze gespeichert.</p>
+  {% endfor %}
+</section>
+<section class="card">
+  <h2>Platz hinzufügen</h2>
+  <form method="post" class="form-row">
+    <input type="hidden" name="action" value="add">
+    <div class="field"><label for="new-name">Name</label><input id="new-name" name="name" required></div>
+    <div class="field grow"><label for="new-pars">Par je Loch (9 oder 18 Werte, kommagetrennt)</label><input id="new-pars" name="pars" value="{{ default_pars }}" required></div>
+    <div class="field actions"><button class="button">Hinzufügen</button></div>
+  </form>
+</section>
+{% endblock %}

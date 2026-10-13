@@ -1,0 +1,19 @@
+services:
+  golfapp:
+    build: .
+    container_name: golfapp
+    ports:
+      - "8000:8000"
+    environment:
+      # Optional: Passwort für Eingaben/Änderungen (Benutzername beliebig). Leer = kein Schutz.
+      APP_PASSWORD: ""
+      # Sollen Final-Four-Runden zusätzlich in die Jahreswertung zählen? (true/false)
+      FINAL_FOUR_IN_ANNUAL: "false"
+      # Fester Schlüssel, damit Hinweis-Meldungen einen Neustart überleben
+      SECRET_KEY: "bitte-aendern"
+    volumes:
+      - golf-data:/data
+    restart: unless-stopped
+
+volumes:
+  golf-data:

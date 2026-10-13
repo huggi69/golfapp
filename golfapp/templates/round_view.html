@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import type_badge with context %}
+{% block title %}Runde {{ round.played_on|de_date }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ round.course_name }} <span class="muted">{{ round.played_on|de_date }}</span></h1>
+  <div class="actions">
+    <a class="button" href="{{ url_for('main.round_edit', round_id=round.id) }}">Bearbeiten</a>
+  </div>
+</div>
+<p>{{ type_badge(round.round_type) }} <span class="muted small">Lochspiel: {{ MATCH_BASES[round.match_basis] }}</span>
+  {% if round.notes %}<br><span class="small">{{ round.notes }}</span>{% endif %}</p>
+
+<section class="card">
+  <h2>Auswertung</h2>
+  {% if result.complete %}
+    <div class="scoreboard">
+      {% for p in players %}
+        <div class="score-tile">
+          <div class="score-name">{{ p.name }}</div>
+          <div class="score-points">{{ result.points[p.id]|points }}</div>
+          <div class="score-sub">Punkte</div>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="table-wrap">
+    <table class="cats">
+      <thead><tr><th>Kategorie</th>{% for p in players %}<th class="num">{{ p.name }}</th>{% endfor %}<th>Sieger</th></tr></thead>
+      <tbody>
+      {% for cat in result.categories %}
+        <tr>
+          <td>{{ cat.label }}{% if cat.key == 'match' and match_status %}<br><span class="muted small">{{ match_status }}</span>{% endif %}</td>
+          {% for p in players %}
+            <td class="num {{ 'win' if p.id in cat.winners }}">{{ cat.values[p.id] }}{% if cat.key == 'match' %} <span class="muted small">Löcher</span>{% elif cat.key == 'ntp' %} <span class="muted small">× Par 3</span>{% endif %}</td>
+          {% endfor %}
+          <td>{% if cat.winners %}{{ cat.winners|player_names(names) }}{% if cat.winners|length > 1 %} <span class="muted">(je {{ cat.points[cat.winners[0]]|points }})</span>{% endif %}{% else %}<span class="muted">kein Punkt</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% else %}
+    <p class="flash flash-warn">Die Runde ist noch nicht vollständig erfasst ({{ result.missing }} Eingaben fehlen) und zählt deshalb noch nicht.
+      <a href="{{ url_for('main.round_edit', round_id=round.id) }}">Jetzt erfassen</a></p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Scorekarte</h2>
+  <div class="table-wrap">
+  <table class="scorecard">
+    <thead>
+      <tr><th rowspan="2">Loch</th><th rowspan="2">Par</th>
+        {% for p in players %}<th colspan="3" class="player-col">{{ p.name }}</th>{% endfor %}
+        <th rowspan="2">NTP</th></tr>
+      <tr>{% for p in players %}<th class="num player-col">Schl.</th><th class="num">Putts</th><th class="num">Netto</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+    {% for h in holes %}
+      <tr class="{{ 'par3' if h.par == 3 }}">
+        <td>{{ h.hole }}</td><td>{{ h.par }}</td>
+        {% for p in players %}
+          {% set s = scores.get((p.id, h.hole), {}) %}
+          <td class="num player-col">{{ s.get('strokes') if s.get('strokes') is not none else '–' }}</td>
+          <td class="num">{{ s.get('putts') if s.get('putts') is not none else '–' }}</td>
+          <td class="num">{{ s.get('net_points') if s.get('net_points') is not none else '–' }}</td>
+        {% endfor %}
+        <td>{% if h.par == 3 %}{{ names.get(h.ntp_player_id, '–') }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><th>Σ</th><th>{{ holes|sum(attribute='par') }}</th>
+        {% for p in players %}
+          {% set ns = namespace(s=0, p=0, n=0) %}
+          {% for h in holes %}{% set sc = scores.get((p.id, h.hole), {}) %}
+            {% set ns.s = ns.s + (sc.strokes or 0) %}{% set ns.p = ns.p + (sc.putts or 0) %}{% set ns.n = ns.n + (sc.net_points or 0) %}
+          {% endfor %}
+          <th class="num player-col">{{ ns.s }}</th><th class="num">{{ ns.p }}</th><th class="num">{{ ns.n }}</th>
+        {% endfor %}
+        <th></th></tr>
+    </tfoot>
+  </table>
+  </div>
+</section>
+
+<form method="post" action="{{ url_for('main.round_delete', round_id=round.id) }}"
+      onsubmit="return confirm('Diese Runde wirklich löschen?');">
+  <button class="button button-danger" type="submit">Runde löschen</button>
+</form>
+{% endblock %}
