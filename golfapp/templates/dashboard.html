@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "_macros.html" import type_badge, standing_table with context %}
+{% block title %}Saison {{ year }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Saison {{ year }}</h1>
+  <form method="get" class="inline">
+    <label for="year" class="sr-only">Jahr</label>
+    <select id="year" name="year" onchange="this.form.submit()">
+      {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+    <noscript><button>Anzeigen</button></noscript>
+  </form>
+</div>
+<p class="muted small">Wettbewerbszeitraum 01.01.{{ year }} – 31.12.{{ year }}</p>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Jahreswertung</h2>
+    <p class="muted small">
+      {% if ff_in_annual %}Alle ausgewerteten Runden inkl. Final Four.{% else %}Alle ausgewerteten normalen Runden (ohne Final Four).{% endif %}
+    </p>
+    {{ standing_table(annual, "Noch keine ausgewerteten Runden in diesem Jahr.") }}
+  </section>
+
+  <section class="card card-ff">
+    <h2>Final Four <span class="muted small">{{ ff_count }} / 4 Runden</span></h2>
+    <p class="muted small">Sonderwertung – vier Runden an einem Wochenende.</p>
+    {% if ff_count > 4 %}<div class="flash flash-warn">Achtung: {{ ff_count }} Final-Four-Runden in {{ year }} angelegt (vorgesehen sind 4).</div>{% endif %}
+    {{ standing_table(final_four, "Das Final Four wurde noch nicht gespielt.") }}
+  </section>
+</div>
+
+<section class="card">
+  <div class="page-head">
+    <h2>Runden {{ year }}</h2>
+    <a class="button" href="{{ url_for('main.round_new') }}">+ Neue Runde</a>
+  </div>
+  {% if rounds %}
+  <div class="table-wrap">
+  <table class="rounds">
+    <thead>
+      <tr>
+        <th>Datum</th><th>Platz</th><th>Typ</th>
+        {% for key, label, _ in CATEGORIES %}<th>{{ label }}</th>{% endfor %}
+        <th>Punkte</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rounds %}
+      <tr class="{{ 'row-ff' if r.round.round_type == 'final_four' }}">
+        <td><a href="{{ url_for('main.round_view', round_id=r.round.id) }}">{{ r.round.played_on|de_date }}</a></td>
+        <td>{{ r.round.course_name }}</td>
+        <td>{{ type_badge(r.round.round_type) }}</td>
+        {% if r.result.complete %}
+          {% for cat in r.result.categories %}
+            <td>{% if cat.winners %}{{ cat.winners|player_names(r.names) }}{% elif cat.tied %}<span class="muted">Gleichstand</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+          {% endfor %}
+          <td class="nowrap">{% for p in r.players %}{{ p.name }} <strong>{{ r.result.points[p.id]|points }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}</td>
+        {% else %}
+          <td colspan="{{ CATEGORIES|length }}"><span class="muted">unvollständig – noch {{ r.result.missing }} Eingaben offen</span>
+            <a href="{{ url_for('main.round_edit', round_id=r.round.id) }}">erfassen</a></td>
+          <td></td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">Keine Runden in {{ year }}.</p>
+  {% endif %}
+</section>
+{% endblock %}

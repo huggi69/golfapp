@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Spieler{% endblock %}
+{% block content %}
+<h1>Spieler</h1>
+<section class="card">
+  <table class="list">
+    <thead><tr><th>Name</th><th>Runden</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for p in players %}
+      <tr class="{{ '' if p.active else 'inactive' }}">
+        <td>
+          <form method="post" class="inline">
+            <input type="hidden" name="action" value="rename"><input type="hidden" name="id" value="{{ p.id }}">
+            <input name="name" value="{{ p.name }}" required aria-label="Name"> <button class="button button-small">Umbenennen</button>
+          </form>
+        </td>
+        <td>{{ p.n_rounds }}</td>
+        <td>
+          <form method="post" class="inline">
+            <input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ p.id }}">
+            <button class="button button-small button-ghost">{{ 'Aktiv' if p.active else 'Inaktiv' }} – umschalten</button>
+          </form>
+        </td>
+        <td>
+          {% if p.n_rounds == 0 %}
+          <form method="post" class="inline" onsubmit="return confirm('Spieler löschen?');">
+            <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ p.id }}">
+            <button class="button button-small button-danger">Löschen</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">Noch keine Spieler.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Spieler hinzufügen</h2>
+  <form method="post" class="inline">
+    <input type="hidden" name="action" value="add">
+    <input name="name" placeholder="Name" required aria-label="Name"> <button class="button">Hinzufügen</button>
+  </form>
+</section>
+{% endblock %}

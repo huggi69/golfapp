@@ -1,0 +1,31 @@
+{% macro type_badge(round_type) -%}
+  {% if round_type == 'final_four' %}<span class="badge badge-ff">Final Four</span>
+  {%- else %}<span class="badge">Normal</span>{% endif %}
+{%- endmacro %}
+
+{% macro standing_table(rows, empty_text) %}
+  {% if rows and rows|map(attribute='rounds')|sum > 0 %}
+  <div class="scoreboard">
+    {% for s in rows %}
+      <div class="score-tile {% if loop.first and (rows|length == 1 or s.points > rows[1].points) %}leader{% endif %}">
+        <div class="score-name">{{ s.player.name }}</div>
+        <div class="score-points">{{ s.points|points }}</div>
+        <div class="score-sub">{{ s.rounds }} Runde{{ '' if s.rounds == 1 else 'n' }}</div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+  <table class="cats">
+    <thead><tr><th>Kategorie</th>{% for s in rows %}<th class="num">{{ s.player.name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for key, label, _ in CATEGORIES %}
+      <tr><td>{{ label }}</td>{% for s in rows %}<td class="num">{{ s.cats[key]|points }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr><th>Gesamt</th>{% for s in rows %}<th class="num">{{ s.points|points }}</th>{% endfor %}</tr></tfoot>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">{{ empty_text }}</p>
+  {% endif %}
+{% endmacro %}

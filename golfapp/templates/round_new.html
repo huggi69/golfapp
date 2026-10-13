@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Neue Runde{% endblock %}
+{% block content %}
+<h1>Neue Runde anlegen</h1>
+<form method="post" class="card form">
+  <div class="field">
+    <label for="played_on">Datum</label>
+    <input type="date" id="played_on" name="played_on" value="{{ form.played_on or today }}" required>
+  </div>
+
+  <fieldset class="field">
+    <legend>Rundentyp</legend>
+    {% set rt = form.round_type or 'normal' %}
+    <label class="choice"><input type="radio" name="round_type" value="normal" {% if rt == 'normal' %}checked{% endif %}> Normale Runde (Jahreswertung)</label>
+    <label class="choice"><input type="radio" name="round_type" value="final_four" {% if rt == 'final_four' %}checked{% endif %}> Final Four (Sonderwertung)</label>
+  </fieldset>
+
+  <div class="field">
+    <label for="course_select">Platz</label>
+    <select id="course_select">
+      <option value="">– eigener Platz –</option>
+      {% for c in courses %}<option value="{{ c.pars }}" data-name="{{ c.name }}" {% if c.name == (form.course_name or default_course) %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="course_name">Platzname</label>
+    <input id="course_name" name="course_name" value="{{ form.course_name or default_course }}" required>
+  </div>
+  <div class="field">
+    <label for="pars">Par je Loch (9 oder 18 Werte, kommagetrennt)</label>
+    <input id="pars" name="pars" value="{{ form.pars or default_pars }}" required>
+    <span class="muted small">Plätze kannst du unter <a href="{{ url_for('main.courses') }}">Plätze</a> speichern.</span>
+  </div>
+
+  <fieldset class="field">
+    <legend>Spieler</legend>
+    {% if players|length < 2 %}
+      <p class="flash flash-warn">Es werden mindestens zwei aktive Spieler benötigt. <a href="{{ url_for('main.players') }}">Spieler anlegen</a></p>
+    {% endif %}
+    {% set chosen = form.getlist('players') if form else [] %}
+    {% for p in players %}
+      <label class="choice"><input type="checkbox" name="players" value="{{ p.id }}" {% if not chosen or (p.id|string) in chosen %}checked{% endif %}> {{ p.name }}</label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="field">
+    <legend>Lochspiel-Wertung</legend>
+    {% set mb = form.match_basis or 'net' %}
+    {% for key, label in MATCH_BASES.items() %}
+      <label class="choice"><input type="radio" name="match_basis" value="{{ key }}" {% if mb == key %}checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+  </fieldset>
+
+  <div class="field">
+    <label for="notes">Notiz (optional)</label>
+    <input id="notes" name="notes" value="{{ form.notes }}">
+  </div>
+
+  <button type="submit" class="button">Runde anlegen &amp; Ergebnisse erfassen</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const sel = document.getElementById('course_select');
+  sel.addEventListener('change', () => {
+    const opt = sel.selectedOptions[0];
+    if (!opt.value) return;
+    document.getElementById('pars').value = opt.value;
+    document.getElementById('course_name').value = opt.dataset.name;
+  });
+</script>
+{% endblock %}

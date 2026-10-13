@@ -1,0 +1,159 @@
+:root {
+  --bg: #f4f6f1;
+  --surface: #ffffff;
+  --text: #1d2a1f;
+  --muted: #66746a;
+  --border: #dfe5db;
+  --accent: #1f7a3f;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3f1e6;
+  --gold: #b8860b;
+  --gold-soft: #fbf3dc;
+  --danger: #b3261e;
+  --warn-soft: #fff4d6;
+  --error-soft: #fde7e5;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111612;
+    --surface: #1a211c;
+    --text: #e6ece6;
+    --muted: #9aa79d;
+    --border: #2c362f;
+    --accent: #4cbf72;
+    --accent-ink: #0b1a10;
+    --accent-soft: #1e3326;
+    --gold: #e0b44c;
+    --gold-soft: #2e2817;
+    --danger: #f2827a;
+    --warn-soft: #3a3115;
+    --error-soft: #3d1c1a;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+}
+a { color: var(--accent); }
+h1 { font-size: 1.6rem; margin: .2em 0 .4em; }
+h2 { font-size: 1.15rem; margin: 0 0 .5em; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+.topbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
+  padding: 12px 16px; background: var(--accent); color: var(--accent-ink);
+}
+.topbar a { color: var(--accent-ink); text-decoration: none; }
+.brand { font-weight: 700; font-size: 1.1rem; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.topbar nav a { opacity: .9; }
+.topbar nav a:hover { opacity: 1; text-decoration: underline; }
+
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 16px;
+}
+.card-ff { border-top: 4px solid var(--gold); }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.grid-2 .card { margin-bottom: 0; }
+.grid-2 { margin-bottom: 16px; }
+
+.muted { color: var(--muted); }
+.small { font-size: .875rem; }
+.nowrap { white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.flash { padding: 10px 14px; border-radius: var(--radius); margin: 0 0 12px; border: 1px solid var(--border); }
+.flash-ok { background: var(--accent-soft); }
+.flash-warn { background: var(--warn-soft); }
+.flash-error { background: var(--error-soft); }
+
+.badge { display: inline-block; font-size: .75rem; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); white-space: nowrap; }
+.badge-ff { background: var(--gold-soft); color: var(--gold); font-weight: 600; }
+.pill { display: inline-block; padding: 6px 10px; border-radius: 6px; background: var(--accent-soft); }
+
+/* Scoreboard */
+.scoreboard { display: flex; gap: 12px; margin: 8px 0 16px; flex-wrap: wrap; }
+.score-tile {
+  flex: 1 1 120px; text-align: center; padding: 12px; border-radius: var(--radius);
+  background: var(--bg); border: 1px solid var(--border);
+}
+.score-tile.leader { border-color: var(--accent); background: var(--accent-soft); }
+.score-name { font-weight: 600; }
+.score-points { font-size: 2.4rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.score-sub { color: var(--muted); font-size: .8rem; }
+
+/* Tabellen */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+thead th { font-size: .8rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+tfoot th { border-top: 2px solid var(--border); border-bottom: none; }
+.num { text-align: right; }
+td.win { font-weight: 700; color: var(--accent); }
+tr.row-ff td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+tr.inactive { opacity: .6; }
+.rounds td { font-size: .9rem; }
+
+.scorecard th, .scorecard td { text-align: center; padding: 4px 6px; }
+.scorecard .player-col { border-left: 2px solid var(--border); }
+.scorecard tr.par3 td:first-child, .scorecard tr.par3 td:nth-child(2) { background: var(--gold-soft); }
+.scorecard.entry input { width: 3.2em; text-align: center; }
+.scorecard.entry input.par { width: 2.6em; }
+.scorecard.entry select { max-width: 9em; }
+
+/* Formulare */
+input, select, button { font: inherit; color: inherit; }
+input, select {
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  min-width: 0;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.form .field { margin-bottom: 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label, .field legend { font-weight: 600; font-size: .9rem; }
+.field input:not([type=radio]):not([type=checkbox]), .field select { width: 100%; }
+fieldset.field { border: none; padding: 0; margin: 0 0 14px; }
+label.choice { font-weight: normal; display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+.form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.form-row .field { flex: 0 1 180px; }
+.form-row .field.grow { flex: 1 1 260px; }
+.form-row .field.actions { flex-direction: row; flex: 0 0 auto; }
+.course-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+form.inline { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.button {
+  display: inline-block; cursor: pointer; text-decoration: none; border: none;
+  background: var(--accent); color: var(--accent-ink); padding: 9px 16px; border-radius: 6px; font-weight: 600;
+}
+.button:hover { filter: brightness(1.08); }
+.button-small { padding: 6px 10px; font-size: .85rem; }
+.button-ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+.button-danger { background: var(--danger); color: #fff; }
+.sticky-actions {
+  position: sticky; bottom: 0; padding: 12px 0; background: linear-gradient(transparent, var(--bg) 30%);
+  display: flex; justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  h1 { font-size: 1.3rem; }
+  .score-points { font-size: 2rem; }
+  .card { padding: 12px; }
+}
+
+/* Zahlenfelder ohne Spinner – auf dem Handy bleibt mehr Platz für die Ziffern */
+.scorecard.entry input[type=number] { -moz-appearance: textfield; appearance: textfield; padding: 7px 4px; }
+.scorecard.entry input[type=number]::-webkit-inner-spin-button,
+.scorecard.entry input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+@media (max-width: 600px) {
+  .scorecard th, .scorecard td { padding: 3px 2px; }
+  .scorecard.entry input { width: 2.6em; }
+  .scorecard.entry input.par { width: 2.2em; }
+}
