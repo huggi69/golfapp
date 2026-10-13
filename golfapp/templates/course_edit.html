@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ course.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ course.name }}</h1>
+  <a href="{{ url_for('main.courses') }}">alle Plätze</a>
+</div>
+
+<section class="card">
+  <h2>Platzdaten</h2>
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="update">
+    <div class="field"><label for="name">Name</label><input id="name" name="name" value="{{ course.name }}" required></div>
+    <div class="field"><label for="pars">Par je Loch (Summe {{ par_total }})</label><input id="pars" name="pars" value="{{ course.pars }}" required></div>
+    <div class="field"><label for="si">Handicap-Reihenfolge je Loch (1 = schwerstes Loch)</label>
+      <input id="si" name="stroke_index" value="{{ course.stroke_index }}" placeholder="z.B. 7,11,15,1,3,13,17,9,5,8,12,16,2,4,14,18,10,6">
+      <span class="muted small">Steht auf der Scorekarte meist als „Hcp“ oder „Vorgabe“. Ohne diese Angabe müssen Nettopunkte von Hand eingetragen werden.</span></div>
+    <button class="button">Speichern</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Abschläge</h2>
+  <p class="muted small">Course Rating und Slope je Abschlag, wie auf der Scorekarte oder der Vorgabentabelle des Clubs angegeben
+    (bei 9-Loch-Plätzen die 9-Loch-Werte).</p>
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr><th>Abschlag</th><th>Course Rating</th><th>Slope</th><th></th></tr></thead>
+    <tbody>
+    {% for t in tees %}
+      <tr>
+        <td colspan="4">
+          <form method="post" class="inline">
+            <input type="hidden" name="tee_id" value="{{ t.id }}">
+            <input name="tee_name" value="{{ t.name }}" required aria-label="Abschlag">
+            <input name="course_rating" value="{{ t.course_rating|decimal }}" inputmode="decimal" class="input-short" required aria-label="Course Rating">
+            <input name="slope" value="{{ t.slope }}" inputmode="numeric" class="input-short" required aria-label="Slope">
+            <button class="button button-small" name="action" value="update_tee">Speichern</button>
+            <button class="button button-small button-danger" name="action" value="delete_tee" formnovalidate onclick="return confirm('Abschlag löschen?');">Löschen</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">Noch keine Abschläge.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <h3>Abschlag hinzufügen</h3>
+  <form method="post" class="form-row">
+    <input type="hidden" name="action" value="add_tee">
+    <div class="field"><label for="tee_name">Name</label><input id="tee_name" name="tee_name" placeholder="z.B. Gelb Herren" required></div>
+    <div class="field"><label for="course_rating">Course Rating</label><input id="course_rating" name="course_rating" inputmode="decimal" placeholder="71,9" required></div>
+    <div class="field"><label for="slope">Slope</label><input id="slope" name="slope" inputmode="numeric" placeholder="136" required></div>
+    <div class="field actions"><button class="button">Hinzufügen</button></div>
+  </form>
+</section>
+
+<form method="post" onsubmit="return confirm('Platz wirklich löschen? Bereits gespielte Runden bleiben erhalten.');">
+  <input type="hidden" name="action" value="delete">
+  <button class="button button-danger">Platz löschen</button>
+</form>
+{% endblock %}

@@ -19,6 +19,25 @@ def close_db(_exc=None):
         conn.close()
 
 
+# Spalten, die nach der ersten Version hinzugekommen sind: (Tabelle, Spalte, Definition)
+MIGRATIONS = [
+    ("players", "hcp_index", "REAL"),
+    ("courses", "stroke_index", "TEXT NOT NULL DEFAULT ''"),
+    ("round_holes", "stroke_index", "INTEGER"),
+    ("round_players", "hcp_index", "REAL"),
+    ("round_players", "tee_name", "TEXT NOT NULL DEFAULT ''"),
+    ("round_players", "course_rating", "REAL"),
+    ("round_players", "slope", "INTEGER"),
+]
+
+
+def _migrate(conn):
+    for table, column, definition in MIGRATIONS:
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db(app):
     Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
     schema = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
@@ -26,6 +45,7 @@ def init_db(app):
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(schema)
+        _migrate(conn)
         conn.commit()
     finally:
         conn.close()

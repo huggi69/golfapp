@@ -2,16 +2,21 @@
 {% block title %}Spieler{% endblock %}
 {% block content %}
 <h1>Spieler</h1>
+<p class="muted">Der Handicap-Index wird beim Anlegen einer Runde vorgeschlagen und dort jeweils für die Runde gespeichert.
+  Plus-Handicaps mit „+“ eingeben (z.B. +1,2).</p>
 <section class="card">
+  <div class="table-wrap">
   <table class="list">
-    <thead><tr><th>Name</th><th>Runden</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name / Handicap-Index</th><th>Runden</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for p in players %}
       <tr class="{{ '' if p.active else 'inactive' }}">
         <td>
           <form method="post" class="inline">
-            <input type="hidden" name="action" value="rename"><input type="hidden" name="id" value="{{ p.id }}">
-            <input name="name" value="{{ p.name }}" required aria-label="Name"> <button class="button button-small">Umbenennen</button>
+            <input type="hidden" name="action" value="update"><input type="hidden" name="id" value="{{ p.id }}">
+            <input name="name" value="{{ p.name }}" required aria-label="Name">
+            <input name="hcp_index" value="{{ p.hcp_index|hcp }}" placeholder="HCPI" inputmode="decimal" class="input-short" aria-label="Handicap-Index">
+            <button class="button button-small">Speichern</button>
           </form>
         </td>
         <td>{{ p.n_rounds }}</td>
@@ -35,12 +40,15 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 <section class="card">
   <h2>Spieler hinzufügen</h2>
   <form method="post" class="inline">
     <input type="hidden" name="action" value="add">
-    <input name="name" placeholder="Name" required aria-label="Name"> <button class="button">Hinzufügen</button>
+    <input name="name" placeholder="Name" required aria-label="Name">
+    <input name="hcp_index" placeholder="HCPI" inputmode="decimal" class="input-short" aria-label="Handicap-Index">
+    <button class="button">Hinzufügen</button>
   </form>
 </section>
 {% endblock %}

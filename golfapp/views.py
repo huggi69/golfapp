@@ -17,6 +17,7 @@ from flask import (
 )
 
 from .db import get_db
+from .handicap import playing_handicap, stableford_points, strokes_received
 from .scoring import CATEGORIES, evaluate_round, format_points, match_status
 
 bp = Blueprint("main", __name__)
@@ -78,6 +79,18 @@ def de_date_filter(value):
         return value
 
 
+@bp.app_template_filter("hcp")
+def hcp_filter(value):
+    return format_hcp_index(value)
+
+
+@bp.app_template_filter("decimal")
+def decimal_filter(value):
+    if value is None:
+        return ""
+    return f"{value:g}".replace(".", ",")
+
+
 @bp.app_context_processor
 def inject_globals():
     return {"ROUND_TYPES": ROUND_TYPES, "MATCH_BASES": MATCH_BASES, "CATEGORIES": CATEGORIES}
@@ -97,6 +110,48 @@ def _int_or_none(value):
         return None
 
 
+def parse_float(value):
+    """Zahl mit Komma oder Punkt ('18,4' / '18.4'), leer -> None."""
+    value = (value or "").strip().replace(",", ".")
+    if value == "":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def parse_hcp_index(value):
+    """Handicap-Index; Plus-Handicaps als '+2,1' oder '-2,1' (beides = -2,1)."""
+    value = (value or "").strip()
+    plus = value.startswith("+")
+    number = parse_float(value.lstrip("+"))
+    if number is None or not -10 <= number <= 54:
+        return None
+    return -abs(number) if plus else number
+
+
+def format_hcp_index(value):
+    if value is None:
+        return ""
+    text = f"{abs(value):.1f}".replace(".", ",")
+    return f"+{text}" if value < 0 else text
+
+
+def parse_stroke_index(text, n):
+    """Handicap-Reihenfolge: n verschiedene Zahlen von 1 bis 18; leer -> [] (unbekannt)."""
+    text = (text or "").replace(";", ",").strip()
+    if not text:
+        return []
+    try:
+        values = [int(v) for v in text.split(",") if v.strip()]
+    except ValueError:
+        return None
+    if len(values) != n or len(set(values)) != n or any(v < 1 or v > 18 for v in values):
+        return None
+    return values
+
+
 def parse_pars(text):
     try:
         pars = [int(p) for p in text.replace(";", ",").split(",") if p.strip()]
@@ -113,7 +168,8 @@ def load_round(round_id):
     if rnd is None:
         abort(404)
     players = db.execute(
-        "SELECT p.* FROM players p JOIN round_players rp ON rp.player_id = p.id "
+        "SELECT p.id, p.name, p.active, rp.hcp_index, rp.tee_name, rp.course_rating, rp.slope "
+        "FROM players p JOIN round_players rp ON rp.player_id = p.id "
         "WHERE rp.round_id = ? ORDER BY p.id",
         (round_id,),
     ).fetchall()
@@ -127,6 +183,15 @@ def load_round(round_id):
         (r["player_id"], r["hole"]): dict(r)
         for r in db.execute("SELECT * FROM scores WHERE round_id = ?", (round_id,))
     }
+    handicaps, auto_net = round_handicaps(players, holes)
+    if auto_net:
+        # Nettopunkte ergeben sich aus den Schlägen – berechnete Werte haben Vorrang.
+        for (pid, hole), sc in scores.items():
+            h = next((x for x in holes if x["hole"] == hole), None)
+            if h is not None and pid in handicaps:
+                sc["net_points"] = stableford_points(
+                    h["par"], handicaps[pid]["received"][hole], sc["strokes"]
+                )
     player_ids = [p["id"] for p in players]
     result = evaluate_round(player_ids, holes, scores, rnd["match_basis"])
     names = {p["id"]: p["name"] for p in players}
@@ -141,7 +206,34 @@ def load_round(round_id):
         "scores": scores,
         "result": result,
         "match_status": status,
+        "handicaps": handicaps,
+        "auto_net": auto_net,
     }
+
+
+def round_handicaps(players, holes):
+    """Spielvorgabe und Vorgabeschläge je Spieler.
+
+    Rückgabe: ({player_id: {"phcp": int|None, "received": {hole: n}}}, auto_net)
+    auto_net ist True, wenn für alle Spieler und Löcher genug Daten vorliegen, um die
+    Nettopunkte aus den Schlägen zu berechnen.
+    """
+    par_total = sum(h["par"] for h in holes)
+    si_known = bool(holes) and all(h.get("stroke_index") for h in holes)
+    si = {h["hole"]: h["stroke_index"] for h in holes} if si_known else {}
+    result = {}
+    auto = si_known and bool(players)
+    for p in players:
+        phcp = playing_handicap(
+            p["hcp_index"], p["course_rating"], p["slope"], par_total, len(holes)
+        )
+        if phcp is None:
+            auto = False
+        result[p["id"]] = {
+            "phcp": phcp,
+            "received": strokes_received(phcp, si) if si_known else {},
+        }
+    return result, auto
 
 
 def _rounds_for_year(year):
@@ -241,6 +333,7 @@ def round_new():
         round_type = form.get("round_type", "normal")
         match_basis = form.get("match_basis", "net")
         pars = parse_pars(form.get("pars", ""))
+        stroke_index = parse_stroke_index(form.get("stroke_index"), len(pars or []))
         player_ids = [int(p) for p in form.getlist("players") if p.isdigit()]
 
         errors = []
@@ -256,6 +349,10 @@ def round_new():
             errors.append("Ungültige Lochspiel-Wertung.")
         if pars is None:
             errors.append("Par-Werte: 9 oder 18 Zahlen zwischen 3 und 6, durch Komma getrennt.")
+        elif stroke_index is None:
+            errors.append(
+                f"Handicap-Reihenfolge: {len(pars)} verschiedene Zahlen von 1 bis 18 oder leer lassen."
+            )
         valid_ids = {p["id"] for p in players}
         if len(set(player_ids) & valid_ids) < 2:
             errors.append("Bitte mindestens zwei Spieler auswählen.")
@@ -268,28 +365,58 @@ def round_new():
             )
             round_id = cur.lastrowid
             db.executemany(
-                "INSERT INTO round_holes (round_id, hole, par) VALUES (?, ?, ?)",
-                [(round_id, i + 1, par) for i, par in enumerate(pars)],
+                "INSERT INTO round_holes (round_id, hole, par, stroke_index) VALUES (?, ?, ?, ?)",
+                [
+                    (round_id, i + 1, par, stroke_index[i] if stroke_index else None)
+                    for i, par in enumerate(pars)
+                ],
             )
-            db.executemany(
-                "INSERT INTO round_players (round_id, player_id) VALUES (?, ?)",
-                [(round_id, pid) for pid in sorted(set(player_ids) & valid_ids)],
-            )
+            for pid in sorted(set(player_ids) & valid_ids):
+                hcp_index = parse_hcp_index(form.get(f"hcp_{pid}"))
+                db.execute(
+                    "INSERT INTO round_players "
+                    "(round_id, player_id, hcp_index, tee_name, course_rating, slope) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        round_id,
+                        pid,
+                        hcp_index,
+                        form.get(f"tee_{pid}", "").strip(),
+                        parse_float(form.get(f"cr_{pid}")),
+                        _int_or_none(form.get(f"slope_{pid}")),
+                    ),
+                )
+                if hcp_index is not None:
+                    # Aktuellen Handicap-Index als Vorschlag für die nächste Runde merken
+                    db.execute("UPDATE players SET hcp_index = ? WHERE id = ?", (hcp_index, pid))
             db.commit()
             flash("Runde angelegt – jetzt die Ergebnisse erfassen.", "ok")
             return redirect(url_for("main.round_edit", round_id=round_id))
         for e in errors:
             flash(e, "error")
 
-    default_course = courses[0] if courses else None
+    tees = {}
+    for t in db.execute("SELECT * FROM course_tees ORDER BY course_id, name"):
+        tees.setdefault(t["course_id"], []).append(
+            {"name": t["name"], "cr": t["course_rating"], "slope": t["slope"]}
+        )
+    course_data = [
+        {
+            "id": c["id"],
+            "name": c["name"],
+            "pars": c["pars"],
+            "stroke_index": c["stroke_index"],
+            "tees": tees.get(c["id"], []),
+        }
+        for c in courses
+    ]
     return render_template(
         "round_new.html",
         players=players,
-        courses=courses,
+        courses=course_data,
         form=form,
         today=date.today().isoformat(),
-        default_pars=default_course["pars"] if default_course else ",".join(map(str, DEFAULT_PARS)),
-        default_course=default_course["name"] if default_course else "",
+        default_pars=",".join(map(str, DEFAULT_PARS)),
     )
 
 
@@ -329,8 +456,35 @@ def round_edit(round_id):
         )
 
         player_ids = {p["id"] for p in data["players"]}
+        for pid in player_ids:
+            slope = _int_or_none(form.get(f"slope_{pid}"))
+            if slope is not None and not 55 <= slope <= 155:
+                slope = None
+            db.execute(
+                "UPDATE round_players SET hcp_index = ?, tee_name = ?, course_rating = ?, slope = ? "
+                "WHERE round_id = ? AND player_id = ?",
+                (
+                    parse_hcp_index(form.get(f"hcp_{pid}")),
+                    form.get(f"tee_{pid}", "").strip(),
+                    parse_float(form.get(f"cr_{pid}")),
+                    slope,
+                    round_id,
+                    pid,
+                ),
+            )
+
+        stroke_index = parse_stroke_index(
+            ",".join(form.get(f"si_{h['hole']}", "") for h in data["holes"]).strip(","),
+            len(data["holes"]),
+        )
+        if stroke_index is None:
+            flash("Handicap-Reihenfolge ungültig (jede Zahl nur einmal, 1–18) – nicht übernommen.", "warn")
+            stroke_index = [h["stroke_index"] for h in data["holes"]]
+        elif not stroke_index:
+            stroke_index = [None] * len(data["holes"])
+
         warnings = []
-        for h in data["holes"]:
+        for i, h in enumerate(data["holes"]):
             hole = h["hole"]
             par = _int_or_none(form.get(f"par_{hole}"))
             if par is None or not 3 <= par <= 6:
@@ -339,8 +493,9 @@ def round_edit(round_id):
             if par != 3 or ntp not in player_ids:
                 ntp = None
             db.execute(
-                "UPDATE round_holes SET par = ?, ntp_player_id = ? WHERE round_id = ? AND hole = ?",
-                (par, ntp, round_id, hole),
+                "UPDATE round_holes SET par = ?, ntp_player_id = ?, stroke_index = ? "
+                "WHERE round_id = ? AND hole = ?",
+                (par, ntp, stroke_index[i], round_id, hole),
             )
             for pid in player_ids:
                 strokes = _int_or_none(form.get(f"s_{pid}_{hole}"))
@@ -368,6 +523,16 @@ def round_edit(round_id):
         for w in warnings:
             flash(w, "warn")
         data = load_round(round_id)
+        if data["auto_net"]:
+            # Berechnete Nettopunkte auch in der Datenbank ablegen
+            db.executemany(
+                "UPDATE scores SET net_points = ? WHERE round_id = ? AND player_id = ? AND hole = ?",
+                [
+                    (sc["net_points"], round_id, pid, hole)
+                    for (pid, hole), sc in data["scores"].items()
+                ],
+            )
+            db.commit()
         if data["result"].complete:
             flash("Gespeichert – die Runde ist vollständig und wurde ausgewertet.", "ok")
             if not warnings:
@@ -401,11 +566,17 @@ def players():
         action = request.form.get("action")
         pid = request.form.get("id", type=int)
         name = request.form.get("name", "").strip()
+        hcp_index = parse_hcp_index(request.form.get("hcp_index"))
         try:
             if action == "add" and name:
-                db.execute("INSERT INTO players (name) VALUES (?)", (name,))
-            elif action == "rename" and name and pid:
-                db.execute("UPDATE players SET name = ? WHERE id = ?", (name, pid))
+                db.execute(
+                    "INSERT INTO players (name, hcp_index) VALUES (?, ?)", (name, hcp_index)
+                )
+            elif action == "update" and name and pid:
+                db.execute(
+                    "UPDATE players SET name = ?, hcp_index = ? WHERE id = ?",
+                    (name, hcp_index, pid),
+                )
             elif action == "toggle" and pid:
                 db.execute("UPDATE players SET active = 1 - active WHERE id = ?", (pid,))
             elif action == "delete" and pid:
@@ -430,40 +601,114 @@ def players():
 # Plätze
 # --------------------------------------------------------------------------
 
+def _save_course_fields(db, form, course_id=None):
+    """Prüft Name, Par und Handicap-Reihenfolge; legt an oder aktualisiert. Gibt die id zurück."""
+    name = form.get("name", "").strip()
+    pars = parse_pars(form.get("pars", ""))
+    if not name or pars is None:
+        flash("Name und 9 oder 18 Par-Werte (3–6, kommagetrennt) angeben.", "error")
+        return None
+    stroke_index = parse_stroke_index(form.get("stroke_index"), len(pars))
+    if stroke_index is None:
+        flash(
+            f"Handicap-Reihenfolge: {len(pars)} verschiedene Zahlen von 1 bis 18 oder leer lassen.",
+            "error",
+        )
+        return None
+    values = (name, ",".join(map(str, pars)), ",".join(map(str, stroke_index)))
+    try:
+        if course_id is None:
+            course_id = db.execute(
+                "INSERT INTO courses (name, pars, stroke_index) VALUES (?, ?, ?)", values
+            ).lastrowid
+        else:
+            db.execute(
+                "UPDATE courses SET name = ?, pars = ?, stroke_index = ? WHERE id = ?",
+                (*values, course_id),
+            )
+        db.commit()
+    except sqlite3.IntegrityError:
+        db.rollback()
+        flash("Diesen Platz gibt es bereits.", "error")
+        return None
+    return course_id
+
+
 @bp.route("/courses", methods=["GET", "POST"])
 @write_access
 def courses():
     db = get_db()
     if request.method == "POST":
-        action = request.form.get("action")
-        cid = request.form.get("id", type=int)
-        name = request.form.get("name", "").strip()
-        if action == "delete" and cid:
-            db.execute("DELETE FROM courses WHERE id = ?", (cid,))
-            db.commit()
-            return redirect(url_for("main.courses"))
-        pars = parse_pars(request.form.get("pars", ""))
-        if not name or pars is None:
-            flash("Name und 9 oder 18 Par-Werte (3–6, kommagetrennt) angeben.", "error")
-            return redirect(url_for("main.courses"))
-        pars_text = ",".join(map(str, pars))
-        try:
-            if action == "add":
-                db.execute("INSERT INTO courses (name, pars) VALUES (?, ?)", (name, pars_text))
-            elif action == "update" and cid:
-                db.execute(
-                    "UPDATE courses SET name = ?, pars = ? WHERE id = ?", (name, pars_text, cid)
-                )
-            db.commit()
-        except sqlite3.IntegrityError:
-            db.rollback()
-            flash("Diesen Platz gibt es bereits.", "error")
+        course_id = _save_course_fields(db, request.form)
+        if course_id is not None:
+            flash("Platz angelegt – jetzt die Abschläge mit Course Rating und Slope eintragen.", "ok")
+            return redirect(url_for("main.course_edit", course_id=course_id))
         return redirect(url_for("main.courses"))
 
-    rows = db.execute("SELECT * FROM courses ORDER BY name").fetchall()
+    rows = db.execute(
+        "SELECT c.*, (SELECT COUNT(*) FROM course_tees t WHERE t.course_id = c.id) AS n_tees "
+        "FROM courses c ORDER BY c.name"
+    ).fetchall()
     return render_template(
         "courses.html", courses=rows, default_pars=",".join(map(str, DEFAULT_PARS))
     )
+
+
+@bp.route("/courses/<int:course_id>", methods=["GET", "POST"])
+@write_access
+def course_edit(course_id):
+    db = get_db()
+    course = db.execute("SELECT * FROM courses WHERE id = ?", (course_id,)).fetchone()
+    if course is None:
+        abort(404)
+    if request.method == "POST":
+        form = request.form
+        action = form.get("action")
+        if action == "delete":
+            db.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+            db.commit()
+            flash("Platz gelöscht.", "ok")
+            return redirect(url_for("main.courses"))
+        if action == "update":
+            if _save_course_fields(db, form, course_id) is not None:
+                flash("Platz gespeichert.", "ok")
+        elif action in ("add_tee", "update_tee"):
+            tee_name = form.get("tee_name", "").strip()
+            cr = parse_float(form.get("course_rating"))
+            slope = _int_or_none(form.get("slope"))
+            if not tee_name or cr is None or not 20 <= cr <= 90 or slope is None or not 55 <= slope <= 155:
+                flash("Abschlag: Name, Course Rating (z.B. 71,9) und Slope (55–155) angeben.", "error")
+            else:
+                try:
+                    if action == "add_tee":
+                        db.execute(
+                            "INSERT INTO course_tees (course_id, name, course_rating, slope) "
+                            "VALUES (?, ?, ?, ?)",
+                            (course_id, tee_name, cr, slope),
+                        )
+                    else:
+                        db.execute(
+                            "UPDATE course_tees SET name = ?, course_rating = ?, slope = ? "
+                            "WHERE id = ? AND course_id = ?",
+                            (tee_name, cr, slope, form.get("tee_id", type=int), course_id),
+                        )
+                    db.commit()
+                except sqlite3.IntegrityError:
+                    db.rollback()
+                    flash("Diesen Abschlag gibt es bereits.", "error")
+        elif action == "delete_tee":
+            db.execute(
+                "DELETE FROM course_tees WHERE id = ? AND course_id = ?",
+                (form.get("tee_id", type=int), course_id),
+            )
+            db.commit()
+        return redirect(url_for("main.course_edit", course_id=course_id))
+
+    tees = db.execute(
+        "SELECT * FROM course_tees WHERE course_id = ? ORDER BY name", (course_id,)
+    ).fetchall()
+    pars = [int(p) for p in course["pars"].split(",")]
+    return render_template("course_edit.html", course=course, tees=tees, par_total=sum(pars))
 
 
 @bp.route("/healthz")

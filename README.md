@@ -21,6 +21,24 @@ Jede Runde wird in fünf Kategorien ausgewertet. Der Sieger einer Kategorie beko
 * Eine Runde zählt erst, wenn für alle Spieler und Löcher Schläge, Putts und Nettopunkte erfasst sind.
   Zwischenstände können gespeichert werden.
 
+### Nettopunkte & Spielvorgabe
+
+Sind für eine Runde Handicap-Index, Course Rating und Slope je Spieler sowie die
+Handicap-Reihenfolge der Löcher bekannt, berechnet die App die Nettopunkte automatisch:
+
+* **Spielvorgabe** = Handicap-Index × (Slope / 113) + (Course Rating − Par), kaufmännisch gerundet
+  (World Handicap System, 100 % für Einzel-Stableford). Bei 9-Loch-Runden zählt der halbe
+  Handicap-Index; Course Rating, Slope und Par sind dann die 9-Loch-Werte.
+* Die Vorgabeschläge werden nach der Handicap-Reihenfolge verteilt (Hcp 1 = schwerstes Loch).
+  Plus-Handicaps geben an den leichtesten Löchern Schläge zurück.
+* **Nettopunkte je Loch** = max(0, 2 + Par + Vorgabeschläge − Schläge).
+
+Fehlt eine dieser Angaben, werden die Nettopunkte wie bisher von Hand eingetragen.
+
+Course Rating, Slope und Handicap-Reihenfolge stehen auf der Scorekarte bzw. der Vorgabentabelle
+des Clubs. Eine frei nutzbare Datenbank für deutsche Plätze gibt es nicht – die Werte werden
+deshalb einmal je Platz unter **Plätze** eingetragen.
+
 ### Saison & Final Four
 
 * Eine Saison läuft vom 01.01. bis 31.12. – das Jahr ergibt sich aus dem Rundendatum.
@@ -76,10 +94,13 @@ docker compose cp golfapp:/data/backup.sqlite ./backup.sqlite
 
 ## Bedienung
 
-1. Unter **Spieler** die Spieler anlegen.
-2. Optional unter **Plätze** Plätze mit Par-Werten speichern.
-3. **Neue Runde**: Datum, Rundentyp (Normal / Final Four), Platz, Spieler wählen.
-4. Je Loch Schläge, Putts und Nettopunkte eintragen und bei Par 3 den NTP-Sieger wählen.
+1. Unter **Spieler** die Spieler mit ihrem aktuellen Handicap-Index anlegen.
+2. Unter **Plätze** Plätze mit Par, Handicap-Reihenfolge und den Abschlägen
+   (Course Rating, Slope) speichern.
+3. **Neue Runde**: Datum, Rundentyp (Normal / Final Four), Platz, Spieler, Handicap-Index und
+   Abschlag wählen – die Spielvorgabe wird gleich angezeigt.
+4. Je Loch Schläge und Putts eintragen (Nettopunkte nur, wenn sie nicht automatisch berechnet
+   werden) und bei Par 3 den NTP-Sieger wählen.
 5. Das **Dashboard** zeigt Jahres- und Final-Four-Stand sowie die Ergebnisse jeder Runde.
 
 ## Entwicklung
@@ -97,4 +118,6 @@ pytest                  # Tests
 
 Die Datenbank liegt dann unter `instance/golf.sqlite` (von Git ignoriert).
 
-Aufbau: Flask (`golfapp/`), Auswertungslogik in `golfapp/scoring.py`, Schema in `golfapp/schema.sql`.
+Aufbau: Flask (`golfapp/`), Auswertungslogik in `golfapp/scoring.py`, Spielvorgabe und
+Nettopunkte in `golfapp/handicap.py`, Schema in `golfapp/schema.sql`. Neue Spalten werden beim
+Start automatisch in bestehende Datenbanken übernommen (`MIGRATIONS` in `golfapp/db.py`).
