@@ -1,16 +1,4 @@
-import pytest
-
 from golfapp import create_app
-
-
-@pytest.fixture
-def client(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "test.sqlite"), "TESTING": True,
-                      "APP_PASSWORD": "", "FINAL_FOUR_IN_ANNUAL": False})
-    with app.test_client() as c:
-        c.post("/players", data={"action": "add", "name": "Anna"})
-        c.post("/players", data={"action": "add", "name": "Ben"})
-        yield c
 
 
 def create_round(client, played_on="2026-05-01", round_type="normal"):

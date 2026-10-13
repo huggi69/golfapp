@@ -44,7 +44,8 @@ deshalb einmal je Platz unter **Plätze** eingetragen.
 * Eine Saison läuft vom 01.01. bis 31.12. – das Jahr ergibt sich aus dem Rundendatum.
 * Beim Anlegen einer Runde wählt man **Normale Runde** oder **Final Four**.
 * Final-Four-Runden (vier Runden an einem Wochenende) bilden eine eigene Sonderwertung.
-  Standardmäßig zählen sie **nicht** zur Jahreswertung – umstellbar mit `FINAL_FOUR_IN_ANNUAL=true`.
+  Ob sie zusätzlich zur Jahreswertung zählen, wird je Saison im Dashboard eingestellt.
+  Für Jahre ohne eigene Einstellung gilt `FINAL_FOUR_IN_ANNUAL` (Standard: zählen nicht).
 
 ## Starten
 
@@ -82,7 +83,7 @@ docker run -d -p 8000:8000 -v golf-data:/data --name golfapp golfapp
 |------------------------|-----------------------|-----------------------------------------------------------------------|
 | `DATABASE_PATH`        | `/data/golf.sqlite`   | Pfad der SQLite-Datei                                                 |
 | `APP_PASSWORD`         | leer                  | Wenn gesetzt, verlangen alle Eingabe-/Änderungsseiten dieses Passwort (Benutzername beliebig). Das Dashboard bleibt öffentlich. |
-| `FINAL_FOUR_IN_ANNUAL` | `false`               | Final-Four-Runden zusätzlich in der Jahreswertung zählen               |
+| `FINAL_FOUR_IN_ANNUAL` | `false`               | Standard für Saisons ohne eigene Einstellung: Final-Four-Runden zusätzlich in der Jahreswertung zählen |
 | `SECRET_KEY`           | zufällig              | Schlüssel für Session-Cookies (Hinweis-Meldungen)                     |
 
 ### Backup
@@ -91,6 +92,28 @@ docker run -d -p 8000:8000 -v golf-data:/data --name golfapp golfapp
 docker compose exec golfapp python -c "import sqlite3; s=sqlite3.connect('/data/golf.sqlite'); s.backup(sqlite3.connect('/data/backup.sqlite'))"
 docker compose cp golfapp:/data/backup.sqlite ./backup.sqlite
 ```
+
+### Historie aus der alten App importieren
+
+Der MySQL-Dump der alten App (Tabellen `golf_games`, `golf_holes`, `golf_players`,
+`golf_season`, z.B. aus TablePlus exportiert) lässt sich direkt importieren:
+
+```bash
+# Mit Docker
+docker compose cp golf.sql golfapp:/data/golf.sql
+docker compose exec golfapp python -m golfapp.legacy_import /data/golf.sql
+
+# Ohne Docker
+python -m golfapp.legacy_import golf.sql
+```
+
+* Spieler werden über den Namen zugeordnet bzw. angelegt.
+* Final Four, „FF zählt zur Jahreswertung“ und die Lochspiel-Wertung („lochberechnung“:
+  `score` = Brutto, sonst Netto) werden je Saison übernommen.
+* Die alte App kennt kein Par: Löcher mit gewonnenem Pin werden Par 3, alle anderen bleiben
+  „unbekannt“ und lassen sich in der Runde nachtragen. Löcher mit 0 Schlägen gelten als nicht gespielt.
+* Bereits importierte Spiele (Notiz „Import alte App, Spiel …“) werden übersprungen –
+  der Import kann also gefahrlos erneut laufen.
 
 ## Bedienung
 

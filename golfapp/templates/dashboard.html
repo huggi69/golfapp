@@ -17,9 +17,11 @@
 <div class="grid-2">
   <section class="card">
     <h2>Jahreswertung</h2>
-    <p class="muted small">
-      {% if ff_in_annual %}Alle ausgewerteten Runden inkl. Final Four.{% else %}Alle ausgewerteten normalen Runden (ohne Final Four).{% endif %}
-    </p>
+    <form method="post" action="{{ url_for('main.season_update', year=year) }}" class="muted small">
+      <label class="choice"><input type="checkbox" name="ff_in_annual" value="1" {% if ff_in_annual %}checked{% endif %}
+        onchange="this.form.submit()"> Final-Four-Runden zählen in {{ year }} zur Jahreswertung</label>
+      <noscript><button class="button button-small">Übernehmen</button></noscript>
+    </form>
     {{ standing_table(annual, "Noch keine ausgewerteten Runden in diesem Jahr.") }}
   </section>
 

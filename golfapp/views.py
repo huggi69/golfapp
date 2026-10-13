@@ -218,8 +218,9 @@ def round_handicaps(players, holes):
     auto_net ist True, wenn für alle Spieler und Löcher genug Daten vorliegen, um die
     Nettopunkte aus den Schlägen zu berechnen.
     """
-    par_total = sum(h["par"] for h in holes)
-    si_known = bool(holes) and all(h.get("stroke_index") for h in holes)
+    pars_known = all(h["par"] is not None for h in holes)
+    par_total = sum(h["par"] for h in holes) if pars_known else None
+    si_known = pars_known and bool(holes) and all(h.get("stroke_index") for h in holes)
     si = {h["hole"]: h["stroke_index"] for h in holes} if si_known else {}
     result = {}
     auto = si_known and bool(players)
@@ -284,7 +285,7 @@ def dashboard():
         int(r["y"]) for r in db.execute("SELECT DISTINCT substr(played_on, 1, 4) AS y FROM rounds")
     )
     players = db.execute("SELECT * FROM players ORDER BY id").fetchall()
-    ff_in_annual = current_app.config["FINAL_FOUR_IN_ANNUAL"]
+    ff_in_annual = season_ff_in_annual(year)
 
     annual = _empty_standing(players)
     final_four = _empty_standing(players)
@@ -313,6 +314,26 @@ def dashboard():
         ff_in_annual=ff_in_annual,
         rounds=rounds,
     )
+
+
+def season_ff_in_annual(year):
+    """Zählen Final-Four-Runden in diesem Jahr zur Jahreswertung?"""
+    row = get_db().execute("SELECT ff_in_annual FROM seasons WHERE year = ?", (year,)).fetchone()
+    if row is None:
+        return current_app.config["FINAL_FOUR_IN_ANNUAL"]
+    return bool(row["ff_in_annual"])
+
+
+@bp.route("/seasons/<int:year>", methods=["POST"])
+def season_update(year):
+    db = get_db()
+    db.execute(
+        "INSERT INTO seasons (year, ff_in_annual) VALUES (?, ?) "
+        "ON CONFLICT(year) DO UPDATE SET ff_in_annual = excluded.ff_in_annual",
+        (year, 1 if request.form.get("ff_in_annual") else 0),
+    )
+    db.commit()
+    return redirect(url_for("main.dashboard", year=year))
 
 
 # --------------------------------------------------------------------------
@@ -490,7 +511,7 @@ def round_edit(round_id):
             if par is None or not 3 <= par <= 6:
                 par = h["par"]
             ntp = _int_or_none(form.get(f"ntp_{hole}"))
-            if par != 3 or ntp not in player_ids:
+            if par not in (3, None) or ntp not in player_ids:
                 ntp = None
             db.execute(
                 "UPDATE round_holes SET par = ?, ntp_player_id = ?, stroke_index = ? "
