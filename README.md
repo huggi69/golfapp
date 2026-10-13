@@ -30,6 +30,18 @@ Jede Runde wird in fünf Kategorien ausgewertet. Der Sieger einer Kategorie beko
 
 ## Starten
 
+### Projekt lokal einrichten
+
+Das Projekt liegt lokal unter `~/Projekte/golfapp`:
+
+```bash
+mkdir -p ~/Projekte
+cd ~/Projekte
+git clone https://github.com/huggi69/golfapp.git
+cd golfapp
+git checkout main
+```
+
 ### Mit Docker Compose
 
 ```bash
@@ -72,11 +84,17 @@ docker compose cp golfapp:/data/backup.sqlite ./backup.sqlite
 
 ## Entwicklung
 
+Ohne Docker, im Ordner `~/Projekte/golfapp` (Python 3 erforderlich):
+
 ```bash
-python -m venv .venv && . .venv/bin/activate
+cd ~/Projekte/golfapp
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements-dev.txt
 python wsgi.py          # Entwicklungsserver auf http://localhost:8000
 pytest                  # Tests
 ```
+
+Die Datenbank liegt dann unter `instance/golf.sqlite` (von Git ignoriert).
 
 Aufbau: Flask (`golfapp/`), Auswertungslogik in `golfapp/scoring.py`, Schema in `golfapp/schema.sql`.
