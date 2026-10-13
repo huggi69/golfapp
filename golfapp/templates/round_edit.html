@@ -35,12 +35,35 @@
   </section>
 
   <section class="card">
-    <p class="muted small">Je Loch und Spieler: Schläge, Putts und Nettopunkte (Stableford). Bei Par-3-Löchern den Gewinner von „Nearest to the Pin“ auswählen.
+    <h2>Spielvorgabe</h2>
+    <div class="table-wrap">
+    <table class="handicap-table">
+      <thead><tr><th>Spieler</th><th>Handicap-Index</th><th>Abschlag</th><th>Course Rating</th><th>Slope</th><th class="num">Spielvorgabe</th></tr></thead>
+      <tbody>
+      {% for p in players %}
+        <tr data-player="{{ p.id }}">
+          <td>{{ p.name }}</td>
+          <td><input name="hcp_{{ p.id }}" value="{{ p.hcp_index|hcp }}" inputmode="decimal" aria-label="Handicap-Index {{ p.name }}"></td>
+          <td><input name="tee_{{ p.id }}" value="{{ p.tee_name }}" aria-label="Abschlag {{ p.name }}"></td>
+          <td><input name="cr_{{ p.id }}" value="{{ p.course_rating|decimal }}" inputmode="decimal" aria-label="Course Rating {{ p.name }}"></td>
+          <td><input name="slope_{{ p.id }}" value="{{ p.slope if p.slope is not none }}" inputmode="numeric" aria-label="Slope {{ p.name }}"></td>
+          <td class="num ph" data-ph>{{ handicaps[p.id].phcp if handicaps[p.id].phcp is not none else '–' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="muted small" id="net-mode"></p>
+  </section>
+
+  <section class="card">
+    <p class="muted small">Je Loch und Spieler: Schläge und Putts – und Nettopunkte, falls sie nicht automatisch berechnet werden.
+      Bei Par-3-Löchern den Gewinner von „Nearest to the Pin“ auswählen. Die Punkte unter den Schlägen zeigen die Vorgabeschläge.
       Teilergebnisse können jederzeit gespeichert werden – gewertet wird die Runde, sobald alles erfasst ist.</p>
     <div class="table-wrap">
     <table class="scorecard entry">
       <thead>
-        <tr><th rowspan="2">Loch</th><th rowspan="2">Par</th>
+        <tr><th rowspan="2">Loch</th><th rowspan="2">Par</th><th rowspan="2" title="Handicap-Reihenfolge">Hcp</th>
           {% for p in players %}<th colspan="3" class="player-col">{{ p.name }}</th>{% endfor %}
           <th rowspan="2">Nearest to the Pin</th></tr>
         <tr>{% for p in players %}<th class="player-col">Schl.</th><th>Putts</th><th>Netto</th>{% endfor %}</tr>
@@ -50,11 +73,12 @@
         <tr class="{{ 'par3' if h.par == 3 }}" data-hole="{{ h.hole }}">
           <td>{{ h.hole }}</td>
           <td><input class="par" type="number" inputmode="numeric" min="3" max="6" name="par_{{ h.hole }}" value="{{ h.par }}" aria-label="Par Loch {{ h.hole }}"></td>
+          <td><input class="si" type="number" inputmode="numeric" min="1" max="18" name="si_{{ h.hole }}" value="{{ h.stroke_index if h.stroke_index is not none }}" aria-label="Handicap-Reihenfolge Loch {{ h.hole }}"></td>
           {% for p in players %}
             {% set s = scores.get((p.id, h.hole), {}) %}
-            <td class="player-col"><input type="number" inputmode="numeric" min="1" max="20" name="s_{{ p.id }}_{{ h.hole }}" data-sum="s_{{ p.id }}" value="{{ s.get('strokes') if s.get('strokes') is not none }}" aria-label="Schläge {{ p.name }} Loch {{ h.hole }}"></td>
+            <td class="player-col"><input type="number" inputmode="numeric" min="1" max="20" name="s_{{ p.id }}_{{ h.hole }}" data-sum="s_{{ p.id }}" data-strokes="{{ p.id }}" value="{{ s.get('strokes') if s.get('strokes') is not none }}" aria-label="Schläge {{ p.name }} Loch {{ h.hole }}"><span class="recv" data-recv="{{ p.id }}"></span></td>
             <td><input type="number" inputmode="numeric" min="0" max="15" name="p_{{ p.id }}_{{ h.hole }}" data-sum="p_{{ p.id }}" value="{{ s.get('putts') if s.get('putts') is not none }}" aria-label="Putts {{ p.name }} Loch {{ h.hole }}"></td>
-            <td><input type="number" inputmode="numeric" min="0" max="10" name="n_{{ p.id }}_{{ h.hole }}" data-sum="n_{{ p.id }}" value="{{ s.get('net_points') if s.get('net_points') is not none }}" aria-label="Nettopunkte {{ p.name }} Loch {{ h.hole }}"></td>
+            <td><input type="number" inputmode="numeric" min="0" max="10" name="n_{{ p.id }}_{{ h.hole }}" data-sum="n_{{ p.id }}" data-net="{{ p.id }}" value="{{ s.get('net_points') if s.get('net_points') is not none }}" aria-label="Nettopunkte {{ p.name }} Loch {{ h.hole }}"></td>
           {% endfor %}
           <td>
             <select name="ntp_{{ h.hole }}" class="ntp" {% if h.par != 3 %}disabled{% endif %} aria-label="Nearest to the Pin Loch {{ h.hole }}">
@@ -66,7 +90,7 @@
       {% endfor %}
       </tbody>
       <tfoot>
-        <tr><th>Σ</th><th></th>
+        <tr><th>Σ</th><th></th><th></th>
           {% for p in players %}
             <th class="num player-col" data-total="s_{{ p.id }}"></th><th class="num" data-total="p_{{ p.id }}"></th><th class="num" data-total="n_{{ p.id }}"></th>
           {% endfor %}
@@ -81,9 +105,52 @@
 </form>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='handicap.js') }}"></script>
 <script>
   const form = document.getElementById('score-form');
-  function recalc() {
+  const rows = [...form.querySelectorAll('tr[data-hole]')];
+  const playerRows = [...form.querySelectorAll('tr[data-player]')];
+
+  function handicapAndNet() {
+    const holes = rows.map(r => ({
+      hole: Number(r.dataset.hole),
+      par: Number(r.querySelector('input.par').value),
+      si: Hcp.parseNum(r.querySelector('input.si').value),
+      row: r,
+    }));
+    const par = holes.reduce((a, h) => a + h.par, 0);
+    const siKnown = holes.every(h => h.si !== null);
+    let auto = siKnown;
+    playerRows.forEach(pr => {
+      const pid = pr.dataset.player;
+      const ph = Hcp.playingHandicap(
+        Hcp.parseIndex(pr.querySelector(`[name="hcp_${pid}"]`).value),
+        Hcp.parseNum(pr.querySelector(`[name="cr_${pid}"]`).value),
+        Hcp.parseNum(pr.querySelector(`[name="slope_${pid}"]`).value),
+        par, holes.length);
+      pr.querySelector('[data-ph]').textContent = ph === null ? '–' : ph;
+      if (ph === null) auto = false;
+      const recv = siKnown ? Hcp.strokesReceived(ph, holes) : {};
+      holes.forEach(h => {
+        const n = recv[h.hole] || 0;
+        h.row.querySelector(`[data-recv="${pid}"]`).textContent = n > 0 ? '•'.repeat(n) : (n < 0 ? '−'.repeat(-n) : '');
+      });
+      pr.received = recv;
+    });
+    holes.forEach(h => playerRows.forEach(pr => {
+      const pid = pr.dataset.player;
+      const net = h.row.querySelector(`[data-net="${pid}"]`);
+      net.readOnly = auto;
+      if (auto) {
+        const s = Hcp.parseNum(h.row.querySelector(`[data-strokes="${pid}"]`).value);
+        net.value = s === null ? '' : Hcp.stableford(h.par, pr.received[h.hole] || 0, s);
+      }
+    }));
+    document.getElementById('net-mode').textContent = auto
+      ? 'Nettopunkte werden automatisch aus Schlägen, Spielvorgabe und Handicap-Reihenfolge berechnet.'
+      : 'Für die automatische Berechnung der Nettopunkte fehlen Angaben (Handicap-Index, Course Rating, Slope oder Handicap-Reihenfolge) – Nettopunkte bitte von Hand eintragen.';
+  }
+  function totals() {
     const sums = {};
     form.querySelectorAll('input[data-sum]').forEach(i => {
       const v = parseInt(i.value, 10);
@@ -92,7 +159,6 @@
     form.querySelectorAll('[data-total]').forEach(c => c.textContent = sums[c.dataset.total] || 0);
   }
   form.addEventListener('input', e => {
-    recalc();
     if (e.target.classList.contains('par')) {
       const row = e.target.closest('tr');
       const isPar3 = e.target.value === '3';
@@ -101,7 +167,10 @@
       ntp.disabled = !isPar3;
       if (!isPar3) ntp.value = '';
     }
+    handicapAndNet();
+    totals();
   });
-  recalc();
+  handicapAndNet();
+  totals();
 </script>
 {% endblock %}

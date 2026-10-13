@@ -1,14 +1,26 @@
 CREATE TABLE IF NOT EXISTS players (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT    NOT NULL UNIQUE,
-    active      INTEGER NOT NULL DEFAULT 1
+    active      INTEGER NOT NULL DEFAULT 1,
+    hcp_index   REAL                           -- aktueller Handicap-Index (Vorschlag für neue Runden)
 );
 
 CREATE TABLE IF NOT EXISTS courses (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT    NOT NULL UNIQUE,
     -- Kommagetrennte Par-Werte, z.B. "4,4,3,5,..." (9 oder 18 Löcher)
-    pars        TEXT    NOT NULL
+    pars        TEXT    NOT NULL,
+    -- Kommagetrennte Handicap-Reihenfolge je Loch (1 = schwerstes Loch), leer = unbekannt
+    stroke_index TEXT   NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS course_tees (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id     INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    name          TEXT    NOT NULL,            -- z.B. "Gelb Herren"
+    course_rating REAL    NOT NULL,
+    slope         INTEGER NOT NULL CHECK (slope BETWEEN 55 AND 155),
+    UNIQUE (course_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS rounds (
@@ -30,12 +42,18 @@ CREATE TABLE IF NOT EXISTS round_holes (
     par         INTEGER NOT NULL CHECK (par BETWEEN 3 AND 6),
     -- Gewinner Nearest to the Pin (nur Par-3-Löcher), NULL = niemand auf dem Grün
     ntp_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    stroke_index  INTEGER,                     -- Handicap-Reihenfolge, NULL = unbekannt
     PRIMARY KEY (round_id, hole)
 );
 
 CREATE TABLE IF NOT EXISTS round_players (
     round_id    INTEGER NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
     player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+    -- Werte zum Zeitpunkt der Runde; sind alle gesetzt, werden Nettopunkte berechnet
+    hcp_index     REAL,
+    tee_name      TEXT    NOT NULL DEFAULT '',
+    course_rating REAL,
+    slope         INTEGER,
     PRIMARY KEY (round_id, player_id)
 );
 

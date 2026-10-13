@@ -157,3 +157,11 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wr
   .scorecard.entry input { width: 2.6em; }
   .scorecard.entry input.par { width: 2.2em; }
 }
+
+.input-short { width: 6em; }
+h3 { font-size: 1rem; margin: 1.2em 0 .5em; }
+.handicap-table input { width: 6em; }
+.handicap-table select { max-width: 12em; }
+.recv { color: var(--accent); font-size: .7rem; letter-spacing: -1px; display: block; line-height: 1; }
+.scorecard.entry input[readonly] { background: var(--accent-soft); border-color: transparent; }
+.ph { font-weight: 700; }

@@ -2,7 +2,7 @@
 {% block title %}Neue Runde{% endblock %}
 {% block content %}
 <h1>Neue Runde anlegen</h1>
-<form method="post" class="card form">
+<form method="post" class="card form" id="new-round">
   <div class="field">
     <label for="played_on">Datum</label>
     <input type="date" id="played_on" name="played_on" value="{{ form.played_on or today }}" required>
@@ -19,28 +19,51 @@
     <label for="course_select">Platz</label>
     <select id="course_select">
       <option value="">– eigener Platz –</option>
-      {% for c in courses %}<option value="{{ c.pars }}" data-name="{{ c.name }}" {% if c.name == (form.course_name or default_course) %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      {% for c in courses %}<option value="{{ c.id }}" {% if c.name == form.course_name or (not form and loop.first) %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
     </select>
   </div>
   <div class="field">
     <label for="course_name">Platzname</label>
-    <input id="course_name" name="course_name" value="{{ form.course_name or default_course }}" required>
+    <input id="course_name" name="course_name" value="{{ form.course_name }}" required>
   </div>
   <div class="field">
     <label for="pars">Par je Loch (9 oder 18 Werte, kommagetrennt)</label>
     <input id="pars" name="pars" value="{{ form.pars or default_pars }}" required>
-    <span class="muted small">Plätze kannst du unter <a href="{{ url_for('main.courses') }}">Plätze</a> speichern.</span>
+  </div>
+  <div class="field">
+    <label for="stroke_index">Handicap-Reihenfolge je Loch (optional)</label>
+    <input id="stroke_index" name="stroke_index" value="{{ form.stroke_index }}" placeholder="z.B. 7,11,15,1,3,13,17,9,5,…">
+    <span class="muted small">Plätze mit Abschlägen und Handicap-Reihenfolge kannst du unter <a href="{{ url_for('main.courses') }}">Plätze</a> speichern.</span>
   </div>
 
   <fieldset class="field">
-    <legend>Spieler</legend>
+    <legend>Spieler &amp; Spielvorgabe</legend>
     {% if players|length < 2 %}
       <p class="flash flash-warn">Es werden mindestens zwei aktive Spieler benötigt. <a href="{{ url_for('main.players') }}">Spieler anlegen</a></p>
     {% endif %}
     {% set chosen = form.getlist('players') if form else [] %}
-    {% for p in players %}
-      <label class="choice"><input type="checkbox" name="players" value="{{ p.id }}" {% if not chosen or (p.id|string) in chosen %}checked{% endif %}> {{ p.name }}</label>
-    {% endfor %}
+    <div class="table-wrap">
+    <table class="handicap-table">
+      <thead><tr><th>Spieler</th><th>Handicap-Index</th><th>Abschlag</th><th>Course Rating</th><th>Slope</th><th class="num">Spielvorgabe</th></tr></thead>
+      <tbody>
+      {% for p in players %}
+        <tr data-player="{{ p.id }}">
+          <td><label class="choice"><input type="checkbox" name="players" value="{{ p.id }}" {% if not chosen or (p.id|string) in chosen %}checked{% endif %}> {{ p.name }}</label></td>
+          <td><input name="hcp_{{ p.id }}" value="{{ form['hcp_' ~ p.id] if form else p.hcp_index|hcp }}" inputmode="decimal" placeholder="z.B. 18,4" aria-label="Handicap-Index {{ p.name }}"></td>
+          <td>
+            <select class="tee-select" aria-label="Abschlag {{ p.name }}"><option value="">– eigene Werte –</option></select>
+            <input type="hidden" name="tee_{{ p.id }}" value="{{ form['tee_' ~ p.id] }}">
+          </td>
+          <td><input name="cr_{{ p.id }}" value="{{ form['cr_' ~ p.id] }}" inputmode="decimal" placeholder="71,9" aria-label="Course Rating {{ p.name }}"></td>
+          <td><input name="slope_{{ p.id }}" value="{{ form['slope_' ~ p.id] }}" inputmode="numeric" placeholder="136" aria-label="Slope {{ p.name }}"></td>
+          <td class="num ph" data-ph>–</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <span class="muted small">Sind Handicap-Index, Course Rating, Slope und die Handicap-Reihenfolge bekannt, berechnet die App die Nettopunkte automatisch.
+      Sonst werden sie je Loch von Hand eingetragen.</span>
   </fieldset>
 
   <fieldset class="field">
@@ -60,13 +83,69 @@
 </form>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='handicap.js') }}"></script>
 <script>
+  const COURSES = {{ courses|tojson }};
+  const form = document.getElementById('new-round');
   const sel = document.getElementById('course_select');
+  const course = () => COURSES.find(c => String(c.id) === sel.value);
+
+  function fillTees(keepValues) {
+    const c = course();
+    form.querySelectorAll('tr[data-player]').forEach(row => {
+      const select = row.querySelector('.tee-select');
+      const hidden = row.querySelector('input[name^="tee_"]');
+      select.innerHTML = '<option value="">– eigene Werte –</option>';
+      (c ? c.tees : []).forEach((t, i) => {
+        const o = new Option(`${t.name} (${String(t.cr).replace('.', ',')} / ${t.slope})`, i);
+        if (keepValues && t.name === hidden.value) o.selected = true;
+        select.add(o);
+      });
+      if (!keepValues && c && c.tees.length) { select.selectedIndex = 1; applyTee(row); }
+    });
+  }
+  function applyTee(row) {
+    const c = course(), select = row.querySelector('.tee-select');
+    const t = c && select.value !== '' ? c.tees[Number(select.value)] : null;
+    row.querySelector('input[name^="tee_"]').value = t ? t.name : '';
+    if (t) {
+      row.querySelector('input[name^="cr_"]').value = String(t.cr).replace('.', ',');
+      row.querySelector('input[name^="slope_"]').value = t.slope;
+    }
+  }
+  function recalc() {
+    const pars = document.getElementById('pars').value.split(/[,;]/).map(Number).filter(n => n > 0);
+    const par = pars.reduce((a, b) => a + b, 0);
+    form.querySelectorAll('tr[data-player]').forEach(row => {
+      const ph = Hcp.playingHandicap(
+        Hcp.parseIndex(row.querySelector('input[name^="hcp_"]').value),
+        Hcp.parseNum(row.querySelector('input[name^="cr_"]').value),
+        Hcp.parseNum(row.querySelector('input[name^="slope_"]').value),
+        par || null, pars.length);
+      row.querySelector('[data-ph]').textContent = ph === null ? '–' : ph;
+    });
+  }
   sel.addEventListener('change', () => {
-    const opt = sel.selectedOptions[0];
-    if (!opt.value) return;
-    document.getElementById('pars').value = opt.value;
-    document.getElementById('course_name').value = opt.dataset.name;
+    const c = course();
+    if (c) {
+      document.getElementById('course_name').value = c.name;
+      document.getElementById('pars').value = c.pars;
+      document.getElementById('stroke_index').value = c.stroke_index;
+    }
+    fillTees(false);
+    recalc();
   });
+  form.addEventListener('change', e => {
+    if (e.target.classList.contains('tee-select')) applyTee(e.target.closest('tr'));
+    recalc();
+  });
+  form.addEventListener('input', recalc);
+
+  {% if form %}
+  fillTees(true);
+  {% else %}
+  sel.dispatchEvent(new Event('change'));
+  {% endif %}
+  recalc();
 </script>
 {% endblock %}
