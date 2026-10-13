@@ -3,51 +3,56 @@
 {% block content %}
 <h1>Spieler</h1>
 <p class="muted">Der Handicap-Index wird beim Anlegen einer Runde vorgeschlagen und dort jeweils für die Runde gespeichert.
-  Plus-Handicaps mit „+“ eingeben (z.B. +1,2).</p>
-<section class="card">
-  <div class="table-wrap">
-  <table class="list">
-    <thead><tr><th>Name / Handicap-Index</th><th>Runden</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-    {% for p in players %}
-      <tr class="{{ '' if p.active else 'inactive' }}">
-        <td>
-          <form method="post" class="inline">
-            <input type="hidden" name="action" value="update"><input type="hidden" name="id" value="{{ p.id }}">
-            <input name="name" value="{{ p.name }}" required aria-label="Name">
-            <input name="hcp_index" value="{{ p.hcp_index|hcp }}" placeholder="HCPI" inputmode="decimal" class="input-short" aria-label="Handicap-Index">
-            <button class="button button-small">Speichern</button>
-          </form>
-        </td>
-        <td>{{ p.n_rounds }}</td>
-        <td>
-          <form method="post" class="inline">
-            <input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ p.id }}">
-            <button class="button button-small button-ghost">{{ 'Aktiv' if p.active else 'Inaktiv' }} – umschalten</button>
-          </form>
-        </td>
-        <td>
-          {% if p.n_rounds == 0 %}
-          <form method="post" class="inline" onsubmit="return confirm('Spieler löschen?');">
-            <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ p.id }}">
-            <button class="button button-small button-danger">Löschen</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
+  Plus-Handicaps mit „+“ eingeben (z.B. +1,2). Mit einem Passwort kann sich der Spieler anmelden (Name + Passwort);
+  alle angemeldeten Spieler haben die gleichen Rechte.</p>
+{% for p in players %}
+<section class="card player-card {{ '' if p.active else 'inactive' }}">
+  <form method="post" class="inline">
+    <input type="hidden" name="action" value="update"><input type="hidden" name="id" value="{{ p.id }}">
+    <input name="name" value="{{ p.name }}" required aria-label="Name">
+    <input name="hcp_index" value="{{ p.hcp_index|hcp }}" placeholder="HCPI" inputmode="decimal" class="input-short" aria-label="Handicap-Index">
+    <button class="button button-small">Speichern</button>
+  </form>
+  <div class="player-row">
+    <span class="muted small">Login:</span>
+    {% if p.id == current_user.id %}
+      <a href="{{ url_for('auth.account') }}">eigenes Passwort ändern</a>
     {% else %}
-      <tr><td colspan="4" class="muted">Noch keine Spieler.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+      <form method="post" class="inline">
+        <input type="hidden" name="action" value="password"><input type="hidden" name="id" value="{{ p.id }}">
+        <span class="small">{{ '✓ vorhanden' if p.has_login else 'kein Login' }}</span>
+        <input name="password" type="password" placeholder="{{ 'neues Passwort' if p.has_login else 'Passwort setzen' }}"
+               autocomplete="new-password" class="input-mid" required aria-label="Passwort für {{ p.name }}">
+        <button class="button button-small">Setzen</button>
+      </form>
+    {% endif %}
+  </div>
+  <div class="player-row">
+    <span class="muted small">{{ p.n_rounds }} Runde{{ '' if p.n_rounds == 1 else 'n' }} ·</span>
+    {% if p.id != current_user.id %}
+      <form method="post" class="inline">
+        <input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ p.id }}">
+        <button class="button button-small button-ghost">{{ 'Aktiv' if p.active else 'Inaktiv' }} – umschalten</button>
+      </form>
+      {% if p.n_rounds == 0 %}
+      <form method="post" class="inline" onsubmit="return confirm('Spieler löschen?');">
+        <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ p.id }}">
+        <button class="button button-small button-danger">Löschen</button>
+      </form>
+      {% endif %}
+    {% else %}<span class="muted small">aktiv (du)</span>{% endif %}
   </div>
 </section>
+{% else %}
+<section class="card"><p class="muted">Noch keine Spieler.</p></section>
+{% endfor %}
 <section class="card">
   <h2>Spieler hinzufügen</h2>
   <form method="post" class="inline">
     <input type="hidden" name="action" value="add">
     <input name="name" placeholder="Name" required aria-label="Name">
     <input name="hcp_index" placeholder="HCPI" inputmode="decimal" class="input-short" aria-label="Handicap-Index">
+    <input name="password" type="password" placeholder="Passwort (optional)" autocomplete="new-password" class="input-mid" aria-label="Passwort">
     <button class="button">Hinzufügen</button>
   </form>
 </section>

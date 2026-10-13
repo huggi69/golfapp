@@ -73,6 +73,7 @@ def test_import(tmp_path):
 
     # Runden werden ausgewertet und erscheinen im Dashboard
     c = app.test_client()
+    c.post("/login", data={"name": "huggi", "password": "geheim1", "password2": "geheim1"})
     assert "GC Velbert" in c.get("/?year=2022").get_data(as_text=True)
     page = c.get("/rounds/1").get_data(as_text=True)
     assert "Auswertung" in page and "noch nicht vollständig" not in page

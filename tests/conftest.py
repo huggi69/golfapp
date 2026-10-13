@@ -8,11 +8,16 @@ import pytest  # noqa: E402
 from golfapp import create_app  # noqa: E402
 
 
+def make_app(tmp_path, **config):
+    return create_app({"DATABASE": str(tmp_path / "test.sqlite"), "TESTING": True,
+                       "FINAL_FOUR_IN_ANNUAL": False, **config})
+
+
 @pytest.fixture
 def client(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "test.sqlite"), "TESTING": True,
-                      "APP_PASSWORD": "", "FINAL_FOUR_IN_ANNUAL": False})
+    """Angemeldet als Anna (über die Ersteinrichtung); Ben ohne Login."""
+    app = make_app(tmp_path)
     with app.test_client() as c:
-        c.post("/players", data={"action": "add", "name": "Anna"})
+        c.post("/login", data={"name": "Anna", "password": "geheim1", "password2": "geheim1"})
         c.post("/players", data={"action": "add", "name": "Ben"})
         yield c

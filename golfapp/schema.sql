@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS players (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT    NOT NULL UNIQUE,
     active      INTEGER NOT NULL DEFAULT 1,
-    hcp_index   REAL                           -- aktueller Handicap-Index (Vorschlag für neue Runden)
+    hcp_index   REAL,                          -- aktueller Handicap-Index (Vorschlag für neue Runden)
+    password_hash TEXT                         -- NULL = kein Login
 );
 
 CREATE TABLE IF NOT EXISTS courses (

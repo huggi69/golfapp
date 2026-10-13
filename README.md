@@ -82,9 +82,23 @@ docker run -d -p 8000:8000 -v golf-data:/data --name golfapp golfapp
 | Variable               | Standard              | Bedeutung                                                             |
 |------------------------|-----------------------|-----------------------------------------------------------------------|
 | `DATABASE_PATH`        | `/data/golf.sqlite`   | Pfad der SQLite-Datei                                                 |
-| `APP_PASSWORD`         | leer                  | Wenn gesetzt, verlangen alle Eingabe-/Änderungsseiten dieses Passwort (Benutzername beliebig). Das Dashboard bleibt öffentlich. |
 | `FINAL_FOUR_IN_ANNUAL` | `false`               | Standard für Saisons ohne eigene Einstellung: Final-Four-Runden zusätzlich in der Jahreswertung zählen |
-| `SECRET_KEY`           | zufällig              | Schlüssel für Session-Cookies (Hinweis-Meldungen)                     |
+| `SECRET_KEY`           | automatisch           | Schlüssel für die Login-Cookies. Ohne Angabe wird er einmalig erzeugt und als `secret_key` neben der Datenbank gespeichert. |
+| `SESSION_COOKIE_SECURE`| `false`               | Auf `true` setzen, wenn die App nur per HTTPS erreichbar ist           |
+
+### Login
+
+Ohne Anmeldung ist nichts erreichbar. Jeder Spieler meldet sich mit seinem Namen und Passwort
+an und bleibt auf dem Gerät 180 Tage angemeldet. Alle angemeldeten Spieler haben die gleichen Rechte.
+
+* **Ersteinrichtung:** Solange noch niemand ein Passwort hat, legt man auf der Login-Seite den
+  ersten Zugang an (Name + Passwort; ein vorhandener Spieler gleichen Namens wird übernommen).
+* **Mitspieler:** Unter **Spieler** bekommt jeder Spieler ein Passwort (mind. 6 Zeichen).
+  Das eigene Passwort ändert man über den Namen oben rechts.
+* **Passwort vergessen:**
+  ```bash
+  docker compose exec golfapp python -m golfapp.set_password "Name"
+  ```
 
 ### Backup
 
@@ -117,7 +131,8 @@ python -m golfapp.legacy_import golf.sql
 
 ## Bedienung
 
-1. Unter **Spieler** die Spieler mit ihrem aktuellen Handicap-Index anlegen.
+1. Beim ersten Aufruf den eigenen Zugang anlegen, dann unter **Spieler** die Mitspieler mit
+   Handicap-Index und Passwort anlegen.
 2. Unter **Plätze** Plätze mit Par, Handicap-Reihenfolge und den Abschlägen
    (Course Rating, Slope) speichern.
 3. **Neue Runde**: Datum, Rundentyp (Normal / Final Four), Platz, Spieler, Handicap-Index und

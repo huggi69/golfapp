@@ -5,3 +5,4 @@ instance/
 *.sqlite
 *.sqlite-*
 .venv/
+secret_key

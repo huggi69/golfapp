@@ -5,12 +5,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Optional: Passwort für Eingaben/Änderungen (Benutzername beliebig). Leer = kein Schutz.
-      APP_PASSWORD: ""
-      # Sollen Final-Four-Runden zusätzlich in die Jahreswertung zählen? (true/false)
+      # Sollen Final-Four-Runden standardmäßig zur Jahreswertung zählen? (je Saison im Dashboard änderbar)
       FINAL_FOUR_IN_ANNUAL: "false"
-      # Fester Schlüssel, damit Hinweis-Meldungen einen Neustart überleben
-      SECRET_KEY: "bitte-aendern"
+      # Auf "true" setzen, sobald die App nur noch per HTTPS erreichbar ist
+      SESSION_COOKIE_SECURE: "false"
+      # SECRET_KEY wird automatisch erzeugt und in /data/secret_key gespeichert.
     volumes:
       - golf-data:/data
     restart: unless-stopped

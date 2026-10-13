@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Passwort ändern{% endblock %}
+{% block content %}
+<div class="login-box">
+  <h1>Passwort ändern</h1>
+  <p class="muted">Angemeldet als <strong>{{ current_user.name }}</strong>.</p>
+  <form method="post" class="card form">
+    <div class="field"><label for="old">Bisheriges Passwort</label>
+      <input id="old" name="old_password" type="password" autocomplete="current-password" required></div>
+    <div class="field"><label for="new">Neues Passwort</label>
+      <input id="new" name="new_password" type="password" autocomplete="new-password" required></div>
+    <div class="field"><label for="new2">Neues Passwort wiederholen</label>
+      <input id="new2" name="new_password2" type="password" autocomplete="new-password" required></div>
+    <button class="button">Speichern</button>
+  </form>
+</div>
+{% endblock %}

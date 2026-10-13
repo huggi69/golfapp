@@ -232,3 +232,11 @@ h3 { font-size: 1rem; margin: 1.2em 0 .5em; }
 .play-nav .button { flex: 1; padding: 14px; font-size: 1.05rem; }
 .play-nav .button:disabled { opacity: .4; }
 .page-head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Login */
+.login-box { max-width: 420px; margin: 24px auto; }
+.input-mid { width: 11em; }
+.user-menu { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: .9rem; }
+.linklike-light { background: none; border: none; color: var(--accent-ink); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
+.player-card .player-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.player-card.inactive { opacity: .6; }
