@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import date
 from fractions import Fraction
@@ -763,6 +764,101 @@ def courses():
     return render_template(
         "courses.html", courses=rows, default_pars=",".join(map(str, DEFAULT_PARS))
     )
+
+
+@bp.route("/courses/export")
+def courses_export():
+    """Alle Plätze mit Abschlägen als JSON-Datei (zum Übertragen auf eine andere Installation)."""
+    db = get_db()
+    data = {"format": "whisky-torphy-plaetze", "version": 1, "courses": []}
+    for c in db.execute("SELECT * FROM courses ORDER BY name"):
+        data["courses"].append({
+            "name": c["name"],
+            "pars": [int(p) for p in c["pars"].split(",")],
+            "stroke_index": [int(v) for v in c["stroke_index"].split(",")] if c["stroke_index"] else [],
+            "tees": [
+                {"name": t["name"], "course_rating": t["course_rating"], "slope": t["slope"]}
+                for t in db.execute(
+                    "SELECT * FROM course_tees WHERE course_id = ? ORDER BY name", (c["id"],)
+                )
+            ],
+        })
+    return current_app.response_class(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename=plaetze-{date.today().isoformat()}.json"},
+    )
+
+
+def import_courses(db, data):
+    """Übernimmt Plätze aus einem Export. Gleichnamige Plätze werden aktualisiert.
+
+    Rückgabe: (neu, aktualisiert, fehler)
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("courses"), list):
+        raise ValueError("Keine gültige Plätze-Datei.")
+    created = updated = 0
+    errors = []
+    for entry in data["courses"]:
+        if not isinstance(entry, dict):
+            continue
+        name = " ".join(str(entry.get("name", "")).split())
+        pars = parse_pars(",".join(map(str, entry.get("pars") or [])))
+        if not name or pars is None:
+            errors.append(f"„{name or '?'}“: Name oder Par-Werte ungültig")
+            continue
+        stroke_index = parse_stroke_index(",".join(map(str, entry.get("stroke_index") or [])), len(pars))
+        if stroke_index is None:
+            errors.append(f"„{name}“: Handicap-Reihenfolge ungültig – ohne übernommen")
+            stroke_index = []
+        values = (",".join(map(str, pars)), ",".join(map(str, stroke_index)))
+        row = db.execute("SELECT id FROM courses WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+        if row:
+            course_id = row["id"]
+            db.execute("UPDATE courses SET pars = ?, stroke_index = ? WHERE id = ?", (*values, course_id))
+            updated += 1
+        else:
+            course_id = db.execute(
+                "INSERT INTO courses (name, pars, stroke_index) VALUES (?, ?, ?)", (name, *values)
+            ).lastrowid
+            created += 1
+        for tee in entry.get("tees") or []:
+            if not isinstance(tee, dict):
+                continue
+            tee_name = " ".join(str(tee.get("name", "")).split())
+            cr = tee.get("course_rating")
+            slope = tee.get("slope")
+            valid = (
+                tee_name
+                and isinstance(cr, (int, float)) and 20 <= cr <= 90
+                and isinstance(slope, int) and 55 <= slope <= 155
+            )
+            if not valid:
+                errors.append(f"„{name}“: Abschlag „{tee_name or '?'}“ ungültig – übersprungen")
+                continue
+            db.execute(
+                "INSERT INTO course_tees (course_id, name, course_rating, slope) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(course_id, name) DO UPDATE SET "
+                "course_rating = excluded.course_rating, slope = excluded.slope",
+                (course_id, tee_name, float(cr), slope),
+            )
+    db.commit()
+    return created, updated, errors
+
+
+@bp.route("/courses/import", methods=["POST"])
+def courses_import():
+    upload = request.files.get("file")
+    try:
+        data = json.loads(upload.read().decode("utf-8")) if upload else None
+        created, updated, errors = import_courses(get_db(), data)
+    except (ValueError, UnicodeDecodeError):
+        flash("Die Datei ist keine gültige Plätze-Datei (Export aus Whisky Torphy).", "error")
+        return redirect(url_for("main.courses"))
+    flash(f"Import: {created} Platz/Plätze neu, {updated} aktualisiert.", "ok")
+    for e in errors:
+        flash(e, "warn")
+    return redirect(url_for("main.courses"))
 
 
 @bp.route("/courses/<int:course_id>", methods=["GET", "POST"])

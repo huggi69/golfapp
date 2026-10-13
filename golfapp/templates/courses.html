@@ -29,6 +29,18 @@
   {% endif %}
 </section>
 <section class="card">
+  <h2>Übertragen</h2>
+  <p class="muted small">Alle Plätze mit Abschlägen als Datei sichern oder in eine andere Installation übernehmen
+    (z.B. vom eigenen Rechner auf den Server). Gleichnamige Plätze werden beim Import aktualisiert.</p>
+  <div class="form-row">
+    <a class="button button-ghost" href="{{ url_for('main.courses_export') }}">Plätze exportieren</a>
+    <form method="post" action="{{ url_for('main.courses_import') }}" enctype="multipart/form-data" class="inline">
+      <input type="file" name="file" accept=".json,application/json" required aria-label="Plätze-Datei">
+      <button class="button">Importieren</button>
+    </form>
+  </div>
+</section>
+<section class="card">
   <h2>Platz hinzufügen</h2>
   <form method="post" class="form">
     <div class="field"><label for="new-name">Name</label><input id="new-name" name="name" required></div>
