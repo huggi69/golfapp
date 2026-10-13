@@ -1,4 +1,4 @@
-# ⛳ Golf Duell
+# ⛳ Whisky Trophy
 
 Webanwendung für einen jährlichen Golfwettbewerb zwischen zwei (oder mehr) Spielern –
 mit Jahreswertung und der Sonderwertung **Final Four**. Läuft in einem einzigen Container

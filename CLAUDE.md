@@ -8,7 +8,7 @@
 
 ## Projekt
 
-Golf Duell – Flask-App mit SQLite für einen Jahreswettbewerb inkl. Final Four. Details siehe `README.md`.
+Whisky Trophy – Flask-App mit SQLite für einen Jahreswettbewerb inkl. Final Four. Details siehe `README.md`.
 
 - Tests: `pytest`
 - Entwicklungsserver: `python wsgi.py`
