@@ -61,7 +61,7 @@
           <td class="nowrap">{% for p in r.players %}{{ p.name }} <strong>{{ r.result.points[p.id]|points }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}</td>
         {% else %}
           <td colspan="{{ CATEGORIES|length }}"><span class="muted">unvollständig – noch {{ r.result.missing }} Eingaben offen</span>
-            <a href="{{ url_for('main.round_edit', round_id=r.round.id) }}">erfassen</a></td>
+            <a href="{{ url_for('main.round_play', round_id=r.round.id) }}">erfassen</a></td>
           <td></td>
         {% endif %}
       </tr>

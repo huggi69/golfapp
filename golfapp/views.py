@@ -10,6 +10,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -411,8 +412,7 @@ def round_new():
                     # Aktuellen Handicap-Index als Vorschlag für die nächste Runde merken
                     db.execute("UPDATE players SET hcp_index = ? WHERE id = ?", (hcp_index, pid))
             db.commit()
-            flash("Runde angelegt – jetzt die Ergebnisse erfassen.", "ok")
-            return redirect(url_for("main.round_edit", round_id=round_id))
+            return redirect(url_for("main.round_play", round_id=round_id))
         for e in errors:
             flash(e, "error")
 
@@ -507,53 +507,24 @@ def round_edit(round_id):
         warnings = []
         for i, h in enumerate(data["holes"]):
             hole = h["hole"]
-            par = _int_or_none(form.get(f"par_{hole}"))
-            if par is None or not 3 <= par <= 6:
-                par = h["par"]
-            ntp = _int_or_none(form.get(f"ntp_{hole}"))
-            if par not in (3, None) or ntp not in player_ids:
-                ntp = None
-            db.execute(
-                "UPDATE round_holes SET par = ?, ntp_player_id = ?, stroke_index = ? "
-                "WHERE round_id = ? AND hole = ?",
-                (par, ntp, stroke_index[i], round_id, hole),
-            )
-            for pid in player_ids:
-                strokes = _int_or_none(form.get(f"s_{pid}_{hole}"))
-                putts = _int_or_none(form.get(f"p_{pid}_{hole}"))
-                net = _int_or_none(form.get(f"n_{pid}_{hole}"))
-                if strokes is not None and strokes < 1:
-                    strokes = None
-                if putts is not None and putts < 0:
-                    putts = None
-                if net is not None and net < 0:
-                    net = None
-                if strokes is not None and putts is not None and putts >= strokes:
-                    warnings.append(
-                        f"Loch {hole}, {data['names'][pid]}: mehr Putts als Schläge?"
-                    )
-                db.execute(
-                    "INSERT INTO scores (round_id, player_id, hole, strokes, putts, net_points) "
-                    "VALUES (?, ?, ?, ?, ?, ?) "
-                    "ON CONFLICT(round_id, player_id, hole) DO UPDATE SET "
-                    "strokes = excluded.strokes, putts = excluded.putts, "
-                    "net_points = excluded.net_points",
-                    (round_id, pid, hole, strokes, putts, net),
+            entries = {
+                pid: (
+                    _int_or_none(form.get(f"s_{pid}_{hole}")),
+                    _int_or_none(form.get(f"p_{pid}_{hole}")),
+                    _int_or_none(form.get(f"n_{pid}_{hole}")),
                 )
+                for pid in player_ids
+            }
+            warnings += save_hole(
+                db, round_id, h, data["names"], entries,
+                par=_int_or_none(form.get(f"par_{hole}")),
+                ntp=_int_or_none(form.get(f"ntp_{hole}")),
+                stroke_index=stroke_index[i],
+            )
         db.commit()
         for w in warnings:
             flash(w, "warn")
-        data = load_round(round_id)
-        if data["auto_net"]:
-            # Berechnete Nettopunkte auch in der Datenbank ablegen
-            db.executemany(
-                "UPDATE scores SET net_points = ? WHERE round_id = ? AND player_id = ? AND hole = ?",
-                [
-                    (sc["net_points"], round_id, pid, hole)
-                    for (pid, hole), sc in data["scores"].items()
-                ],
-            )
-            db.commit()
+        data = sync_auto_net(round_id)
         if data["result"].complete:
             flash("Gespeichert – die Runde ist vollständig und wurde ausgewertet.", "ok")
             if not warnings:
@@ -564,6 +535,152 @@ def round_edit(round_id):
                 "ok",
             )
     return render_template("round_edit.html", **data)
+
+
+_KEEP = object()
+
+
+def save_hole(db, round_id, hole_row, names, entries, par=None, ntp=None, stroke_index=_KEEP):
+    """Speichert Par, NTP und die Ergebnisse eines Lochs (ohne commit).
+
+    entries: player_id -> (strokes, putts, net_points); ungültige Werte werden zu None.
+    par: neuer Par-Wert oder None = bisherigen behalten.
+    Rückgabe: Liste von Warnungen (z.B. mehr Putts als Schläge).
+    """
+    hole = hole_row["hole"]
+    if par is None or not 3 <= par <= 6:
+        par = hole_row["par"]
+    if par not in (3, None) or ntp not in names:
+        ntp = None
+    if stroke_index is _KEEP:
+        stroke_index = hole_row.get("stroke_index")
+    db.execute(
+        "UPDATE round_holes SET par = ?, ntp_player_id = ?, stroke_index = ? "
+        "WHERE round_id = ? AND hole = ?",
+        (par, ntp, stroke_index, round_id, hole),
+    )
+    warnings = []
+    for pid, (strokes, putts, net) in entries.items():
+        if pid not in names:
+            continue
+        if strokes is not None and not 1 <= strokes <= 20:
+            strokes = None
+        if putts is not None and not 0 <= putts <= 15:
+            putts = None
+        if net is not None and not 0 <= net <= 10:
+            net = None
+        if strokes is not None and putts is not None and putts >= strokes:
+            warnings.append(f"Loch {hole}, {names[pid]}: mehr Putts als Schläge?")
+        db.execute(
+            "INSERT INTO scores (round_id, player_id, hole, strokes, putts, net_points) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(round_id, player_id, hole) DO UPDATE SET "
+            "strokes = excluded.strokes, putts = excluded.putts, "
+            "net_points = excluded.net_points",
+            (round_id, pid, hole, strokes, putts, net),
+        )
+    return warnings
+
+
+def sync_auto_net(round_id):
+    """Lädt die Runde neu und legt automatisch berechnete Nettopunkte in der DB ab."""
+    data = load_round(round_id)
+    if data["auto_net"]:
+        db = get_db()
+        db.executemany(
+            "UPDATE scores SET net_points = ? WHERE round_id = ? AND player_id = ? AND hole = ?",
+            [(sc["net_points"], round_id, pid, hole) for (pid, hole), sc in data["scores"].items()],
+        )
+        db.commit()
+    return data
+
+
+def play_state(data):
+    """Zustand einer Runde als JSON-taugliches dict für die mobile Erfassung."""
+    return {
+        "round": {
+            "id": data["round"]["id"],
+            "match_basis": data["round"]["match_basis"],
+            "auto_net": data["auto_net"],
+            "complete": data["result"].complete,
+            "missing": data["result"].missing,
+        },
+        "holes": [
+            {"hole": h["hole"], "par": h["par"], "si": h["stroke_index"], "ntp": h["ntp_player_id"]}
+            for h in data["holes"]
+        ],
+        "players": [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "phcp": data["handicaps"][p["id"]]["phcp"],
+                "received": data["handicaps"][p["id"]]["received"],
+            }
+            for p in data["players"]
+        ],
+        "scores": {
+            pid: {
+                h["hole"]: {
+                    k: data["scores"].get((pid, h["hole"]), {}).get(k)
+                    for k in ("strokes", "putts", "net_points")
+                }
+                for h in data["holes"]
+            }
+            for pid in data["names"]
+        },
+    }
+
+
+@bp.route("/rounds/<int:round_id>/play")
+@write_access
+def round_play(round_id):
+    data = load_round(round_id)
+    state = play_state(data)
+    # Start beim ersten Loch, das noch nicht komplett erfasst ist
+    keys = ("strokes", "putts") if data["auto_net"] else ("strokes", "putts", "net_points")
+    start = request.args.get("hole", type=int)
+    if start is None:
+        start = next(
+            (
+                h["hole"]
+                for h in data["holes"]
+                if any(
+                    state["scores"][pid][h["hole"]][k] is None
+                    for pid in data["names"]
+                    for k in keys
+                )
+            ),
+            data["holes"][-1]["hole"] if data["holes"] else 1,
+        )
+    return render_template("round_play.html", state=state, start=start, **data)
+
+
+@bp.route("/rounds/<int:round_id>/holes/<int:hole>", methods=["POST"])
+def hole_save(round_id, hole):
+    data = load_round(round_id)
+    hole_row = next((h for h in data["holes"] if h["hole"] == hole), None)
+    if hole_row is None:
+        abort(404)
+    payload = request.get_json(silent=True) or {}
+
+    def num(value):
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    entries = {}
+    for pid_text, values in (payload.get("scores") or {}).items():
+        if str(pid_text).isdigit() and isinstance(values, dict):
+            entries[int(pid_text)] = (
+                num(values.get("strokes")),
+                num(values.get("putts")),
+                num(values.get("net_points")),
+            )
+    db = get_db()
+    warnings = save_hole(
+        db, round_id, hole_row, data["names"], entries,
+        par=num(payload.get("par")), ntp=num(payload.get("ntp")),
+    )
+    db.commit()
+    return jsonify(state=play_state(sync_auto_net(round_id)), warnings=warnings)
 
 
 @bp.route("/rounds/<int:round_id>/delete", methods=["POST"])

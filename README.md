@@ -122,8 +122,11 @@ python -m golfapp.legacy_import golf.sql
    (Course Rating, Slope) speichern.
 3. **Neue Runde**: Datum, Rundentyp (Normal / Final Four), Platz, Spieler, Handicap-Index und
    Abschlag wählen – die Spielvorgabe wird gleich angezeigt.
-4. Je Loch Schläge und Putts eintragen (Nettopunkte nur, wenn sie nicht automatisch berechnet
-   werden) und bei Par 3 den NTP-Sieger wählen.
+4. Nach dem Anlegen öffnet sich die **Erfassung Loch für Loch** – gedacht fürs Handy während der
+   Runde: je Loch und Spieler Schläge und Putts per Tipp (Schnellwahl Birdie/Par/Bogey … oder
+   −/+), bei Par 3 den NTP-Sieger wählen. Nettopunkte und Zwischenstand (inkl. Lochspiel)
+   rechnen live mit. Jede Eingabe wird sofort gespeichert; ohne Netz bleibt sie auf dem Handy und
+   wird automatisch nachgesendet. Die **Tabellenansicht** bleibt für Korrekturen am Rechner.
 5. Das **Dashboard** zeigt Jahres- und Final-Four-Stand sowie die Ergebnisse jeder Runde.
 
 ## Entwicklung

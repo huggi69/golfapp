@@ -5,7 +5,8 @@
 <div class="page-head">
   <h1>{{ round.course_name }} <span class="muted">{{ round.played_on|de_date }}</span></h1>
   <div class="actions">
-    <a class="button" href="{{ url_for('main.round_edit', round_id=round.id) }}">Bearbeiten</a>
+    <a class="button" href="{{ url_for('main.round_play', round_id=round.id) }}">Loch für Loch</a>
+    <a class="button button-ghost" href="{{ url_for('main.round_edit', round_id=round.id) }}">Tabelle</a>
   </div>
 </div>
 <p>{{ type_badge(round.round_type) }} <span class="muted small">Lochspiel: {{ MATCH_BASES[round.match_basis] }}
@@ -42,7 +43,7 @@
     </div>
   {% else %}
     <p class="flash flash-warn">Die Runde ist noch nicht vollständig erfasst ({{ result.missing }} Eingaben fehlen) und zählt deshalb noch nicht.
-      <a href="{{ url_for('main.round_edit', round_id=round.id) }}">Jetzt erfassen</a></p>
+      <a href="{{ url_for('main.round_play', round_id=round.id) }}">Jetzt erfassen</a></p>
   {% endif %}
 </section>
 

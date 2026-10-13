@@ -3,7 +3,8 @@
 {% block content %}
 <div class="page-head">
   <h1>Ergebnisse erfassen</h1>
-  <a href="{{ url_for('main.round_view', round_id=round.id) }}">zur Auswertung</a>
+  <span><a href="{{ url_for('main.round_play', round_id=round.id) }}">Loch für Loch</a> ·
+    <a href="{{ url_for('main.round_view', round_id=round.id) }}">zur Auswertung</a></span>
 </div>
 
 <form method="post" id="score-form">

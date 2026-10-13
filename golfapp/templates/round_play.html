@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% block title %}Loch für Loch{% endblock %}
+{% block content %}
+<div class="play" id="play">
+  <div class="play-head">
+    <a href="{{ url_for('main.round_view', round_id=round.id) }}" class="play-back" aria-label="Zur Auswertung">‹</a>
+    <div class="play-title">
+      <div class="play-course">{{ round.course_name }} · {{ round.played_on|de_date }}</div>
+      <div class="play-hole"><span id="hole-label">Loch –</span> <span class="play-meta" id="hole-meta"></span></div>
+    </div>
+    <span class="play-status" id="save-status" aria-live="polite"></span>
+  </div>
+
+  <nav class="hole-strip" id="hole-strip" aria-label="Loch wählen"></nav>
+
+  <section class="play-card" id="par-card" hidden>
+    <div class="play-label">Par für dieses Loch</div>
+    <div class="chips" id="par-chips"></div>
+  </section>
+
+  <div id="player-cards"></div>
+
+  <section class="play-card" id="ntp-card" hidden>
+    <div class="play-label">Nearest to the Pin</div>
+    <div class="chips" id="ntp-chips"></div>
+  </section>
+
+  <section class="play-card">
+    <div class="play-label">Zwischenstand <span class="muted" id="thru"></span></div>
+    <div id="summary"></div>
+  </section>
+
+  <p class="muted small center">
+    <a href="{{ url_for('main.round_edit', round_id=round.id) }}">Tabellenansicht</a> ·
+    <a href="{{ url_for('main.round_view', round_id=round.id) }}">Auswertung</a>
+  </p>
+
+  <div class="play-nav">
+    <button type="button" class="button button-ghost" id="prev">‹ Zurück</button>
+    <button type="button" class="button" id="next">Weiter ›</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='handicap.js') }}"></script>
+<script>
+(() => {
+  const SAVE_URL = {{ url_for('main.hole_save', round_id=round.id, hole=0)|tojson }}.replace(/0$/, '');
+  const VIEW_URL = {{ url_for('main.round_view', round_id=round.id)|tojson }};
+  const PENDING_KEY = 'golf-pending-{{ round.id }}';
+  let state = {{ state|tojson }};
+  let current = {{ start }};
+  let saveTimer = null;
+  let editingPar = false;
+
+  const $ = id => document.getElementById(id);
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const holeIndex = h => state.holes.findIndex(x => x.hole === h);
+  const holeOf = h => state.holes[holeIndex(h)];
+  const sc = (pid, h) => state.scores[pid][h];
+  const recv = (p, h) => (p.received && p.received[h]) || 0;
+
+  // ---- lokale Warteschlange (falls auf dem Platz kein Netz ist) -------------
+  function loadPending() {
+    try { return JSON.parse(localStorage.getItem(PENDING_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function storePending(p) {
+    try {
+      if (Object.keys(p).length) localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+      else localStorage.removeItem(PENDING_KEY);
+    } catch (e) { /* Speicher nicht verfügbar – dann eben nur im Arbeitsspeicher */ }
+  }
+  let pending = loadPending();
+
+  function applyPayload(h, payload) {
+    const hole = holeOf(Number(h));
+    if (!hole) return;
+    if (payload.par) hole.par = payload.par;
+    hole.ntp = payload.ntp ?? null;
+    for (const [pid, v] of Object.entries(payload.scores)) Object.assign(sc(pid, h), v);
+  }
+  Object.entries(pending).forEach(([h, p]) => applyPayload(h, p));
+
+  function payloadFor(h) {
+    const hole = holeOf(h), scores = {};
+    state.players.forEach(p => { scores[p.id] = { ...sc(p.id, h) }; });
+    return { par: hole.par, ntp: hole.ntp, scores };
+  }
+
+  function setStatus(text, cls) {
+    const el = $('save-status');
+    el.textContent = text;
+    el.className = 'play-status ' + (cls || '');
+  }
+
+  async function flush() {
+    clearTimeout(saveTimer);
+    const holes = Object.keys(pending);
+    if (!holes.length) return;
+    setStatus('speichert …');
+    for (const h of holes) {
+      const payload = pending[h];
+      try {
+        const res = await fetch(SAVE_URL + h, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        if (pending[h] === payload) delete pending[h];
+        state = data.state;
+        Object.entries(pending).forEach(([ph, p]) => applyPayload(ph, p));
+        if (data.warnings && data.warnings.length) setStatus('⚠ ' + data.warnings[0], 'warn');
+      } catch (e) {
+        storePending(pending);
+        setStatus('offline – wird nachgesendet', 'warn');
+        render();
+        return;
+      }
+    }
+    storePending(pending);
+    if (!Object.keys(pending).length && !$('save-status').classList.contains('warn')) setStatus('✓ gespeichert', 'ok');
+    render();
+  }
+
+  function changed() {
+    pending[current] = payloadFor(current);
+    storePending(pending);
+    setStatus('…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 700);
+    render();
+  }
+  window.addEventListener('online', flush);
+  setInterval(() => { if (Object.keys(pending).length) flush(); }, 20000);
+
+  // ---- Berechnungen ----------------------------------------------------------
+  function netOf(p, h) {
+    const s = sc(p.id, h), hole = holeOf(h);
+    if (!state.round.auto_net) return s.net_points;
+    if (s.strokes == null || hole.par == null) return null;
+    return Hcp.stableford(hole.par, recv(p, h), s.strokes);
+  }
+  function holeDone(h) {
+    return state.players.every(p => {
+      const s = sc(p.id, h);
+      return s.strokes != null && s.putts != null && netOf(p, h) != null;
+    });
+  }
+  function holeWinner(h) {
+    const vals = state.players.map(p => state.round.match_basis === 'gross'
+      ? sc(p.id, h).strokes : netOf(p, h));
+    if (vals.some(v => v == null)) return undefined;
+    const best = state.round.match_basis === 'gross' ? Math.min(...vals) : Math.max(...vals);
+    const leaders = state.players.filter((p, i) => vals[i] === best);
+    return leaders.length === 1 ? leaders[0].id : null;
+  }
+
+  // ---- Darstellung -----------------------------------------------------------
+  const LABELS = { '-3': 'Albatros', '-2': 'Eagle', '-1': 'Birdie', '0': 'Par', '1': 'Bogey', '2': 'Doppel', '3': 'Triple' };
+
+  function chip(label, value, selected, onClick, sub) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip' + (selected ? ' selected' : '');
+    b.innerHTML = `<span>${esc(label)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}`;
+    b.addEventListener('click', () => onClick(value));
+    return b;
+  }
+
+  function renderStrip() {
+    const strip = $('hole-strip');
+    strip.innerHTML = '';
+    state.holes.forEach(h => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = h.hole;
+      b.className = 'strip-hole' + (h.hole === current ? ' current' : '') + (holeDone(h.hole) ? ' done' : '');
+      b.addEventListener('click', () => go(h.hole));
+      strip.appendChild(b);
+    });
+    const cur = strip.querySelector('.current');
+    if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  function renderPlayers() {
+    const hole = holeOf(current), par = hole.par;
+    const wrap = $('player-cards');
+    wrap.innerHTML = '';
+    state.players.forEach(p => {
+      const s = sc(p.id, current), r = recv(p, current);
+      const card = document.createElement('section');
+      card.className = 'play-card';
+      const net = netOf(p, current);
+      card.innerHTML = `
+        <div class="player-head">
+          <strong>${esc(p.name)}</strong>
+          <span class="muted small">${r > 0 ? '•'.repeat(r) + ' ' + r + ' Vorgabeschl.' : r < 0 ? 'gibt ' + (-r) + ' zurück' : ''}</span>
+          <span class="net-badge" title="Nettopunkte">${net == null ? '–' : net} Pkt</span>
+        </div>
+        <div class="play-label">Schläge</div>
+        <div class="stepper">
+          <button type="button" class="step" data-d="-1" aria-label="Ein Schlag weniger">−</button>
+          <output class="step-value">${s.strokes ?? '–'}</output>
+          <button type="button" class="step" data-d="1" aria-label="Ein Schlag mehr">+</button>
+        </div>
+        <div class="chips strokes"></div>
+        <div class="play-label">Putts</div>
+        <div class="chips putts"></div>
+        ${state.round.auto_net ? '' : '<div class="play-label">Nettopunkte</div><div class="chips net"></div>'}`;
+
+      const setStrokes = v => { s.strokes = v; if (s.putts != null && v != null && s.putts >= v) s.putts = Math.max(0, v - 1); changed(); };
+      card.querySelectorAll('.step').forEach(btn => btn.addEventListener('click', () => {
+        const base = s.strokes ?? ((par || 4) + Math.max(r, 0) - Number(btn.dataset.d));
+        setStrokes(Math.min(20, Math.max(1, base + Number(btn.dataset.d))));
+      }));
+      const ref = par || 4;
+      const strokesRow = card.querySelector('.chips.strokes');
+      for (let v = Math.max(1, ref - 2); v <= ref + 3; v++) {
+        const diff = v - ref;
+        strokesRow.appendChild(chip(v, v, s.strokes === v, setStrokes, v === 1 ? 'Ass' : par ? LABELS[diff] : ''));
+      }
+      const puttsRow = card.querySelector('.chips.putts');
+      for (let v = 0; v <= 4; v++) puttsRow.appendChild(chip(v, v, s.putts === v, val => { s.putts = val; changed(); }));
+      const netRow = card.querySelector('.chips.net');
+      if (netRow) for (let v = 0; v <= 5; v++) netRow.appendChild(chip(v, v, s.net_points === v, val => { s.net_points = val; changed(); }));
+      wrap.appendChild(card);
+    });
+  }
+
+  function renderPar() {
+    const hole = holeOf(current);
+    const show = hole.par == null || editingPar;
+    $('par-card').hidden = !show;
+    const row = $('par-chips');
+    row.innerHTML = '';
+    if (show) [3, 4, 5, 6].forEach(v => row.appendChild(chip(v, v, hole.par === v, val => {
+      hole.par = val; editingPar = false; if (val !== 3) hole.ntp = null; changed();
+    })));
+  }
+
+  function renderNtp() {
+    const hole = holeOf(current);
+    const show = hole.par === 3 || hole.par == null;
+    $('ntp-card').hidden = !show;
+    const row = $('ntp-chips');
+    row.innerHTML = '';
+    if (!show) return;
+    state.players.forEach(p => row.appendChild(chip(p.name, p.id, hole.ntp === p.id, val => { hole.ntp = val; changed(); })));
+    row.appendChild(chip('Keiner', null, hole.ntp == null, () => { hole.ntp = null; changed(); }));
+  }
+
+  function renderSummary() {
+    const played = state.holes.filter(h => state.players.every(p => sc(p.id, h.hole).strokes != null));
+    $('thru').textContent = played.length ? `nach ${played.length} Loch` : '';
+    const won = Object.fromEntries(state.players.map(p => [p.id, 0]));
+    state.holes.forEach(h => { const w = holeWinner(h.hole); if (w) won[w]++; });
+    const rows = state.players.map(p => {
+      let strokes = 0, putts = 0, net = 0, toPar = 0, parKnown = true;
+      state.holes.forEach(h => {
+        const s = sc(p.id, h.hole);
+        if (s.strokes != null) { strokes += s.strokes; if (h.par != null) toPar += s.strokes - h.par; else parKnown = false; }
+        if (s.putts != null) putts += s.putts;
+        const n = netOf(p, h.hole); if (n != null) net += n;
+      });
+      const tp = !strokes || !parKnown ? '' : ` <span class="muted">(${toPar > 0 ? '+' : ''}${toPar === 0 ? 'E' : toPar})</span>`;
+      return `<tr><td>${esc(p.name)}${p.phcp != null ? ` <span class="muted small">Vg ${p.phcp}</span>` : ''}</td>
+        <td class="num">${strokes || '–'}${tp}</td><td class="num">${putts || '–'}</td>
+        <td class="num">${net || '–'}</td><td class="num">${won[p.id]}</td></tr>`;
+    }).join('');
+    let match = '';
+    if (state.players.length === 2) {
+      const [a, b] = state.players, d = won[a.id] - won[b.id];
+      match = d === 0 ? 'All Square' : `${esc((d > 0 ? a : b).name)} ${Math.abs(d)} auf`;
+    }
+    $('summary').innerHTML = `<table class="cats"><thead><tr><th></th><th class="num">Schläge</th>
+      <th class="num">Putts</th><th class="num">Netto</th><th class="num">Löcher</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      ${match ? `<p class="play-match">Lochspiel (${state.round.match_basis === 'gross' ? 'brutto' : 'netto'}): <strong>${match}</strong></p>` : ''}`;
+  }
+
+  function render() {
+    const hole = holeOf(current), idx = holeIndex(current);
+    $('hole-label').textContent = `Loch ${hole.hole}`;
+    $('hole-meta').innerHTML = `${hole.par ? `Par ${hole.par}` : 'Par ?'}${hole.si ? ` · Hcp ${hole.si}` : ''}
+      ${hole.par ? ' <button type="button" class="linklike" id="edit-par">ändern</button>' : ''}`;
+    const editBtn = $('edit-par');
+    if (editBtn) editBtn.addEventListener('click', () => { editingPar = !editingPar; render(); });
+    renderStrip(); renderPar(); renderPlayers(); renderNtp(); renderSummary();
+    $('prev').disabled = idx === 0;
+    $('next').textContent = idx === state.holes.length - 1 ? 'Runde abschließen ✓' : 'Weiter ›';
+  }
+
+  function go(h) {
+    flush();
+    current = h; editingPar = false;
+    try { history.replaceState(null, '', '?hole=' + h); } catch (e) {}
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  $('prev').addEventListener('click', () => { const i = holeIndex(current); if (i > 0) go(state.holes[i - 1].hole); });
+  $('next').addEventListener('click', async () => {
+    const i = holeIndex(current);
+    if (i < state.holes.length - 1) return go(state.holes[i + 1].hole);
+    await flush();
+    if (Object.keys(pending).length) return alert('Noch nicht alles gespeichert – bitte bei Netz erneut versuchen.');
+    location.href = VIEW_URL;
+  });
+
+  if (holeIndex(current) < 0) current = state.holes[0].hole;
+  render();
+  if (Object.keys(pending).length) flush();
+})();
+</script>
+{% endblock %}
