@@ -10,12 +10,20 @@
 <body>
   <header class="topbar">
     <a class="brand" href="{{ url_for('main.dashboard') }}">⛳ Whisky Torphy</a>
+    {% if current_user %}
     <nav>
       <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
       <a href="{{ url_for('main.round_new') }}">Neue Runde</a>
       <a href="{{ url_for('main.players') }}">Spieler</a>
       <a href="{{ url_for('main.courses') }}">Plätze</a>
     </nav>
+    <div class="user-menu">
+      <a href="{{ url_for('auth.account') }}" title="Passwort ändern">👤 {{ current_user.name }}</a>
+      <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
+        <button class="linklike-light">Abmelden</button>
+      </form>
+    </div>
+    {% endif %}
   </header>
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Anmelden{% endblock %}
+{% block content %}
+<div class="login-box">
+  <h1>{{ 'Einrichten' if setup else 'Anmelden' }}</h1>
+  {% if setup %}
+    <p class="muted">Es hat noch niemand ein Passwort. Lege jetzt deinen Zugang an – danach kannst du unter
+      „Spieler“ die Passwörter für deine Mitspieler festlegen.</p>
+  {% endif %}
+  <form method="post" class="card form">
+    <div class="field">
+      <label for="name">Name</label>
+      <input id="name" name="name" value="{{ name }}" list="player-names" autocomplete="username"
+             autocapitalize="words" required autofocus>
+      <datalist id="player-names">{% for n in names %}<option value="{{ n }}">{% endfor %}</datalist>
+    </div>
+    <div class="field">
+      <label for="password">Passwort</label>
+      <input id="password" name="password" type="password" required
+             autocomplete="{{ 'new-password' if setup else 'current-password' }}">
+    </div>
+    {% if setup %}
+    <div class="field">
+      <label for="password2">Passwort wiederholen</label>
+      <input id="password2" name="password2" type="password" autocomplete="new-password" required>
+    </div>
+    {% endif %}
+    <button class="button">{{ 'Zugang anlegen' if setup else 'Anmelden' }}</button>
+  </form>
+</div>
+{% endblock %}

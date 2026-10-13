@@ -1,12 +1,10 @@
-import hmac
 import sqlite3
 from datetime import date
 from fractions import Fraction
-from functools import wraps
 
 from flask import (
     Blueprint,
-    Response,
+    g,
     abort,
     current_app,
     flash,
@@ -17,6 +15,7 @@ from flask import (
     url_for,
 )
 
+from .auth import hash_password, password_problem
 from .db import get_db
 from .handicap import playing_handicap, stableford_points, strokes_received
 from .scoring import CATEGORIES, evaluate_round, format_points, match_status
@@ -26,40 +25,6 @@ bp = Blueprint("main", __name__)
 ROUND_TYPES = {"normal": "Normale Runde", "final_four": "Final Four"}
 MATCH_BASES = {"net": "Netto (Nettopunkte je Loch)", "gross": "Brutto (Schläge je Loch)"}
 DEFAULT_PARS = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5]
-
-
-# --------------------------------------------------------------------------
-# Zugriffsschutz
-# --------------------------------------------------------------------------
-
-def _authorized():
-    password = current_app.config["APP_PASSWORD"]
-    if not password:
-        return True
-    auth = request.authorization
-    return bool(auth and auth.password and hmac.compare_digest(auth.password, password))
-
-
-def _auth_required():
-    return Response(
-        "Anmeldung erforderlich.", 401, {"WWW-Authenticate": 'Basic realm="Whisky Torphy"'}
-    )
-
-
-def write_access(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if not _authorized():
-            return _auth_required()
-        return view(*args, **kwargs)
-
-    return wrapped
-
-
-@bp.before_request
-def protect_writes():
-    if request.method not in ("GET", "HEAD", "OPTIONS") and not _authorized():
-        return _auth_required()
 
 
 @bp.app_template_filter("points")
@@ -342,7 +307,6 @@ def season_update(year):
 # --------------------------------------------------------------------------
 
 @bp.route("/rounds/new", methods=["GET", "POST"])
-@write_access
 def round_new():
     db = get_db()
     players = db.execute("SELECT * FROM players WHERE active = 1 ORDER BY id").fetchall()
@@ -447,7 +411,6 @@ def round_view(round_id):
 
 
 @bp.route("/rounds/<int:round_id>/edit", methods=["GET", "POST"])
-@write_access
 def round_edit(round_id):
     data = load_round(round_id)
     if request.method == "POST":
@@ -632,7 +595,6 @@ def play_state(data):
 
 
 @bp.route("/rounds/<int:round_id>/play")
-@write_access
 def round_play(round_id):
     data = load_round(round_id)
     state = play_state(data)
@@ -697,7 +659,6 @@ def round_delete(round_id):
 # --------------------------------------------------------------------------
 
 @bp.route("/players", methods=["GET", "POST"])
-@write_access
 def players():
     db = get_db()
     if request.method == "POST":
@@ -705,19 +666,31 @@ def players():
         pid = request.form.get("id", type=int)
         name = request.form.get("name", "").strip()
         hcp_index = parse_hcp_index(request.form.get("hcp_index"))
+        password = request.form.get("password", "")
+        if action in ("add", "password") and password:
+            problem = password_problem(password)
+            if problem:
+                flash(problem, "error")
+                return redirect(url_for("main.players"))
         try:
             if action == "add" and name:
                 db.execute(
-                    "INSERT INTO players (name, hcp_index) VALUES (?, ?)", (name, hcp_index)
+                    "INSERT INTO players (name, hcp_index, password_hash) VALUES (?, ?, ?)",
+                    (name, hcp_index, hash_password(password) if password else None),
                 )
+            elif action == "password" and pid and password:
+                db.execute(
+                    "UPDATE players SET password_hash = ? WHERE id = ?", (hash_password(password), pid)
+                )
+                flash("Passwort gesetzt.", "ok")
             elif action == "update" and name and pid:
                 db.execute(
                     "UPDATE players SET name = ?, hcp_index = ? WHERE id = ?",
                     (name, hcp_index, pid),
                 )
-            elif action == "toggle" and pid:
+            elif action == "toggle" and pid and pid != g.user["id"]:
                 db.execute("UPDATE players SET active = 1 - active WHERE id = ?", (pid,))
-            elif action == "delete" and pid:
+            elif action == "delete" and pid and pid != g.user["id"]:
                 db.execute("DELETE FROM players WHERE id = ?", (pid,))
             db.commit()
         except sqlite3.IntegrityError:
@@ -729,7 +702,8 @@ def players():
         return redirect(url_for("main.players"))
 
     rows = db.execute(
-        "SELECT p.*, (SELECT COUNT(*) FROM round_players rp WHERE rp.player_id = p.id) AS n_rounds "
+        "SELECT p.id, p.name, p.active, p.hcp_index, p.password_hash IS NOT NULL AS has_login, "
+        "(SELECT COUNT(*) FROM round_players rp WHERE rp.player_id = p.id) AS n_rounds "
         "FROM players p ORDER BY p.id"
     ).fetchall()
     return render_template("players.html", players=rows)
@@ -773,7 +747,6 @@ def _save_course_fields(db, form, course_id=None):
 
 
 @bp.route("/courses", methods=["GET", "POST"])
-@write_access
 def courses():
     db = get_db()
     if request.method == "POST":
@@ -793,7 +766,6 @@ def courses():
 
 
 @bp.route("/courses/<int:course_id>", methods=["GET", "POST"])
-@write_access
 def course_edit(course_id):
     db = get_db()
     course = db.execute("SELECT * FROM courses WHERE id = ?", (course_id,)).fetchone()

@@ -41,15 +41,6 @@ def test_full_flow(client):
     assert "1 / 4 Runden" in dash
 
 
-def test_password_protects_writes(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "t.sqlite"), "APP_PASSWORD": "geheim"})
-    c = app.test_client()
-    assert c.get("/").status_code == 200
-    assert c.get("/rounds/new").status_code == 401
-    assert c.post("/players", data={"action": "add", "name": "X"}).status_code == 401
-    ok = c.get("/rounds/new", headers={"Authorization": "Basic dTpnZWhlaW0="})  # u:geheim
-    assert ok.status_code == 200
-
 
 def test_net_points_are_calculated_from_handicap(client):
     resp = client.post("/rounds/new", data={
@@ -124,7 +115,10 @@ def test_old_database_is_migrated(tmp_path):
     db = sqlite3.connect(path)
     assert "hcp_index" in {r[1] for r in db.execute("PRAGMA table_info(players)")}
     assert "stroke_index" in {r[1] for r in db.execute("PRAGMA table_info(courses)")}
-    assert app.test_client().get("/players", headers={}).status_code == 200
+    assert db.execute("SELECT name FROM players").fetchall() == [("Anna",)]
+    assert "password_hash" in {r[1] for r in db.execute("PRAGMA table_info(players)")}
+    # Alte Datenbank ohne Passwörter -> Ersteinrichtung
+    assert "Zugang anlegen" in app.test_client().get("/login").get_data(as_text=True)
 
 
 def test_play_mode_saves_hole_by_hole(client):
@@ -164,10 +158,3 @@ def test_play_mode_saves_hole_by_hole(client):
     # Ohne Lochangabe startet die Maske beim ersten offenen Loch
     assert "let current = 3;" in client.get(f"/rounds/{rid}/play").get_data(as_text=True)
     assert client.post(f"/rounds/{rid}/holes/99", json={}).status_code == 404
-
-
-def test_play_mode_requires_password(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "t.sqlite"), "APP_PASSWORD": "geheim"})
-    c = app.test_client()
-    assert c.get("/rounds/1/play").status_code == 401
-    assert c.post("/rounds/1/holes/1", json={}).status_code == 401

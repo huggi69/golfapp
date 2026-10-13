@@ -5,3 +5,5 @@ instance
 tests
 .pytest_cache
 *.sqlite
+secret_key
+instance

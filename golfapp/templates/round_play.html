@@ -107,6 +107,11 @@
           credentials: 'same-origin',
           body: JSON.stringify(payload),
         });
+        if (res.status === 401) {
+          storePending(pending);
+          setStatus('abgemeldet – bitte neu anmelden', 'warn');
+          return;
+        }
         if (!res.ok) throw new Error(res.status);
         const data = await res.json();
         if (pending[h] === payload) delete pending[h];

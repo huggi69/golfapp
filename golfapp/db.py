@@ -22,6 +22,7 @@ def close_db(_exc=None):
 # Spalten, die nach der ersten Version hinzugekommen sind: (Tabelle, Spalte, Definition)
 MIGRATIONS = [
     ("players", "hcp_index", "REAL"),
+    ("players", "password_hash", "TEXT"),
     ("courses", "stroke_index", "TEXT NOT NULL DEFAULT ''"),
     ("round_holes", "stroke_index", "INTEGER"),
     ("round_players", "hcp_index", "REAL"),
