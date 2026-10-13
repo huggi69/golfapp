@@ -1,0 +1,50 @@
+# Betrieb auf dem Server hinter Traefik (v2/v3).
+#
+#   cp .env.example .env      # Domain, Entrypoints und Certresolver prüfen
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Der Container hängt nur im Traefik-Netzwerk und veröffentlicht keinen Port.
+name: golfapp
+
+services:
+  golfapp:
+    build: .
+    container_name: golfapp
+    restart: unless-stopped
+    environment:
+      TRUST_PROXY: "true"            # X-Forwarded-* von Traefik auswerten
+      SESSION_COOKIE_SECURE: "true"  # Login-Cookie nur über HTTPS
+      FINAL_FOUR_IN_ANNUAL: "false"
+    volumes:
+      - golf-data:/data
+    networks:
+      - web
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-web}
+      # HTTPS
+      - traefik.http.routers.golfapp.rule=Host(`${DOMAIN:?DOMAIN in .env setzen}`)
+      - traefik.http.routers.golfapp.entrypoints=${TRAEFIK_HTTPS_ENTRYPOINT:-websecure}
+      - traefik.http.routers.golfapp.tls=true
+      - traefik.http.routers.golfapp.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.golfapp.middlewares=golfapp-headers
+      - traefik.http.services.golfapp.loadbalancer.server.port=8000
+      # HTTP -> HTTPS (schadet nicht, falls Traefik das schon global macht)
+      - traefik.http.routers.golfapp-http.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.golfapp-http.entrypoints=${TRAEFIK_HTTP_ENTRYPOINT:-web}
+      - traefik.http.routers.golfapp-http.middlewares=golfapp-https
+      - traefik.http.middlewares.golfapp-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.golfapp-https.redirectscheme.permanent=true
+      # Sicherheits-Header
+      - traefik.http.middlewares.golfapp-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.golfapp-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.golfapp-headers.headers.frameDeny=true
+      - traefik.http.middlewares.golfapp-headers.headers.referrerPolicy=same-origin
+
+volumes:
+  golf-data:
+
+networks:
+  web:
+    name: ${TRAEFIK_NETWORK:-web}
+    external: true

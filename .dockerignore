@@ -7,3 +7,4 @@ tests
 *.sqlite
 secret_key
 instance
+.env
