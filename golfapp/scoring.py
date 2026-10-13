@@ -107,7 +107,8 @@ def evaluate_round(player_ids, holes, scores, match_basis="net"):
 
     ntp_wins = {pid: 0 for pid in player_ids}
     for h in holes:
-        if h["par"] == 3 and h.get("ntp_player_id") in ntp_wins:
+        # Par unbekannt (importierte Runden): ein eingetragener NTP-Sieger zählt trotzdem
+        if h["par"] in (3, None) and h.get("ntp_player_id") in ntp_wins:
             ntp_wins[h["ntp_player_id"]] += 1
 
     values = {

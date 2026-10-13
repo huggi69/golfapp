@@ -32,6 +32,28 @@ MIGRATIONS = [
 
 
 def _migrate(conn):
+    # round_holes.par war anfangs NOT NULL – für importierte Runden ohne Par-Angabe lockern.
+    par = [r for r in conn.execute("PRAGMA table_info(round_holes)") if r[1] == "par"]
+    if par and par[0][3]:  # notnull
+        conn.executescript("""
+            PRAGMA foreign_keys = OFF;
+            ALTER TABLE round_holes RENAME TO round_holes_old;
+            CREATE TABLE round_holes (
+                round_id    INTEGER NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+                hole        INTEGER NOT NULL,
+                par         INTEGER CHECK (par IS NULL OR par BETWEEN 3 AND 6),
+                ntp_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+                stroke_index  INTEGER,
+                PRIMARY KEY (round_id, hole)
+            );
+        """)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(round_holes_old)")}
+        si = "stroke_index" if "stroke_index" in cols else "NULL"
+        conn.execute(
+            "INSERT INTO round_holes (round_id, hole, par, ntp_player_id, stroke_index) "
+            f"SELECT round_id, hole, par, ntp_player_id, {si} FROM round_holes_old"
+        )
+        conn.executescript("DROP TABLE round_holes_old; PRAGMA foreign_keys = ON;")
     for table, column, definition in MIGRATIONS:
         columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:

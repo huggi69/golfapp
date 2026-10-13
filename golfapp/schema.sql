@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS rounds (
 CREATE TABLE IF NOT EXISTS round_holes (
     round_id    INTEGER NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
     hole        INTEGER NOT NULL,
-    par         INTEGER NOT NULL CHECK (par BETWEEN 3 AND 6),
+    par         INTEGER CHECK (par IS NULL OR par BETWEEN 3 AND 6),  -- NULL = unbekannt
     -- Gewinner Nearest to the Pin (nur Par-3-Löcher), NULL = niemand auf dem Grün
     ntp_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
     stroke_index  INTEGER,                     -- Handicap-Reihenfolge, NULL = unbekannt
@@ -68,3 +68,9 @@ CREATE TABLE IF NOT EXISTS scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rounds_played_on ON rounds(played_on);
+
+-- Einstellungen je Saison (Jahr); fehlt ein Eintrag, gilt der Standard aus der Konfiguration
+CREATE TABLE IF NOT EXISTS seasons (
+    year          INTEGER PRIMARY KEY,
+    ff_in_annual  INTEGER NOT NULL CHECK (ff_in_annual IN (0, 1))
+);
