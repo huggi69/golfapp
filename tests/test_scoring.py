@@ -48,15 +48,27 @@ def test_each_category_awards_one_point():
     assert r.points == {A: 3, B: 2}
 
 
-def test_ties_split_the_point():
+def test_tie_awards_no_point():
     holes = make_holes([4, 4])
     scores = make_scores({A: [(4, 2, 2), (5, 2, 1)], B: [(5, 2, 1), (4, 2, 2)]})
     r = evaluate_round([A, B], holes, scores)
     for key in ("match", "gross", "net", "putts"):
-        assert cat(r, key).points == {A: Fraction(1, 2), B: Fraction(1, 2)}
+        assert cat(r, key).winners == []
+        assert cat(r, key).tied
+        assert cat(r, key).points == {A: 0, B: 0}
     # Kein Par 3 -> kein NTP-Punkt
     assert cat(r, "ntp").winners == []
-    assert r.points == {A: 2, B: 2}
+    assert not cat(r, "ntp").tied
+    assert r.points == {A: 0, B: 0}
+
+
+def test_tie_for_first_among_three_players():
+    C = 3
+    holes = make_holes([4])
+    scores = make_scores({A: [(4, 2, 2)], B: [(4, 1, 2)], C: [(6, 2, 0)]})
+    r = evaluate_round([A, B, C], holes, scores)
+    assert cat(r, "gross").winners == [] and cat(r, "gross").tied
+    assert cat(r, "putts").winners == [B]
 
 
 def test_gross_match_play_basis():

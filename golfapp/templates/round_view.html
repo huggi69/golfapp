@@ -33,7 +33,7 @@
           {% for p in players %}
             <td class="num {{ 'win' if p.id in cat.winners }}">{{ cat.values[p.id] }}{% if cat.key == 'match' %} <span class="muted small">Löcher</span>{% elif cat.key == 'ntp' %} <span class="muted small">× Par 3</span>{% endif %}</td>
           {% endfor %}
-          <td>{% if cat.winners %}{{ cat.winners|player_names(names) }}{% if cat.winners|length > 1 %} <span class="muted">(je {{ cat.points[cat.winners[0]]|points }})</span>{% endif %}{% else %}<span class="muted">kein Punkt</span>{% endif %}</td>
+          <td>{% if cat.winners %}{{ cat.winners|player_names(names) }}{% elif cat.tied %}<span class="muted">Gleichstand – kein Punkt</span>{% else %}<span class="muted">kein Punkt</span>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>

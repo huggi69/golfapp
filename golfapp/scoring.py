@@ -3,8 +3,7 @@
 Reine Funktionen ohne Datenbankzugriff, damit sie sich leicht testen lassen.
 
 Pro Runde gibt es fünf Kategorien. Der Gewinner einer Kategorie bekommt einen
-Punkt. Teilen sich mehrere Spieler den ersten Platz, wird der Punkt geteilt
-(bei zwei Spielern also je ½ Punkt).
+Punkt. Teilen sich mehrere Spieler den ersten Platz, bekommt keiner einen Punkt.
 """
 
 from dataclasses import dataclass, field
@@ -28,6 +27,7 @@ class CategoryResult:
     values: dict  # player_id -> Wert (Summe bzw. Anzahl gewonnener Löcher)
     winners: list  # player_ids, leer wenn kein Punkt vergeben wird
     points: dict  # player_id -> Fraction
+    tied: bool = False  # Gleichstand an der Spitze -> kein Punkt
 
 
 @dataclass
@@ -39,17 +39,23 @@ class RoundResult:
 
 
 def _award(values, better, award_zero=True):
-    """Ermittelt Gewinner und verteilt einen Punkt auf die Bestplatzierten."""
+    """Ermittelt den Gewinner. Rückgabe: (winners, points, tied).
+
+    Nur ein alleiniger Bestplatzierter bekommt den Punkt; bei Gleichstand an der
+    Spitze geht der Punkt an niemanden.
+    """
+    points = {pid: Fraction(0) for pid in values}
     if not values:
-        return [], {}
+        return [], points, False
     pick = min if better == "low" else max
     best = pick(values.values())
     if not award_zero and best == 0:
-        return [], {pid: Fraction(0) for pid in values}
-    winners = [pid for pid, v in values.items() if v == best]
-    share = Fraction(1, len(winners))
-    points = {pid: (share if pid in winners else Fraction(0)) for pid in values}
-    return winners, points
+        return [], points, False
+    leaders = [pid for pid, v in values.items() if v == best]
+    if len(leaders) > 1:
+        return [], points, True
+    points[leaders[0]] = Fraction(1)
+    return leaders, points, False
 
 
 def hole_winner(hole_scores, basis):
@@ -115,8 +121,8 @@ def evaluate_round(player_ids, holes, scores, match_basis="net"):
     result = RoundResult(complete=True, points={pid: Fraction(0) for pid in player_ids})
     for key, label, better in CATEGORIES:
         # Nearest to the Pin: Hat niemand ein Par 3 gewonnen, gibt es keinen Punkt.
-        winners, pts = _award(values[key], better, award_zero=(key != "ntp"))
-        result.categories.append(CategoryResult(key, label, values[key], winners, pts))
+        winners, pts, tied = _award(values[key], better, award_zero=(key != "ntp"))
+        result.categories.append(CategoryResult(key, label, values[key], winners, pts, tied))
         for pid, p in pts.items():
             result.points[pid] += p
     return result

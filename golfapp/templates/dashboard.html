@@ -54,7 +54,7 @@
         <td>{{ type_badge(r.round.round_type) }}</td>
         {% if r.result.complete %}
           {% for cat in r.result.categories %}
-            <td>{% if cat.winners %}{{ cat.winners|player_names(r.names) }}{% if cat.winners|length > 1 %} <span class="muted">(geteilt)</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+            <td>{% if cat.winners %}{{ cat.winners|player_names(r.names) }}{% elif cat.tied %}<span class="muted">Gleichstand</span>{% else %}<span class="muted">–</span>{% endif %}</td>
           {% endfor %}
           <td class="nowrap">{% for p in r.players %}{{ p.name }} <strong>{{ r.result.points[p.id]|points }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}</td>
         {% else %}

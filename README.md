@@ -16,7 +16,7 @@ Jede Runde wird in fünf Kategorien ausgewertet. Der Sieger einer Kategorie beko
 | Putts                | wenigste Putts gesamt                                                  |
 | Nearest to the Pin   | die meisten gewonnenen Par-3-Löcher (NTP wird je Par 3 erfasst)        |
 
-* **Gleichstand:** Der Punkt wird geteilt (bei zwei Spielern je ½).
+* **Gleichstand:** Teilen sich mehrere Spieler den ersten Platz, bekommt keiner einen Punkt.
 * **Nearest to the Pin:** Gewinnt niemand ein Par 3, wird kein Punkt vergeben.
 * Eine Runde zählt erst, wenn für alle Spieler und Löcher Schläge, Putts und Nettopunkte erfasst sind.
   Zwischenstände können gespeichert werden.
