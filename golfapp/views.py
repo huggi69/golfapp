@@ -42,7 +42,7 @@ def _authorized():
 
 def _auth_required():
     return Response(
-        "Anmeldung erforderlich.", 401, {"WWW-Authenticate": 'Basic realm="Golf Duell"'}
+        "Anmeldung erforderlich.", 401, {"WWW-Authenticate": 'Basic realm="Whisky Torphy"'}
     )
 
 
