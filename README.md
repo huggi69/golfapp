@@ -85,6 +85,7 @@ docker run -d -p 8000:8000 -v golf-data:/data --name golfapp golfapp
 | `FINAL_FOUR_IN_ANNUAL` | `false`               | Standard für Saisons ohne eigene Einstellung: Final-Four-Runden zusätzlich in der Jahreswertung zählen |
 | `SECRET_KEY`           | automatisch           | Schlüssel für die Login-Cookies. Ohne Angabe wird er einmalig erzeugt und als `secret_key` neben der Datenbank gespeichert. |
 | `SESSION_COOKIE_SECURE`| `false`               | Auf `true` setzen, wenn die App nur per HTTPS erreichbar ist           |
+| `TRUST_PROXY`          | `false`               | `true` hinter einem Reverse Proxy (Traefik): Protokoll und Client-IP aus `X-Forwarded-*` übernehmen. Nur setzen, wenn ein Proxy davor sitzt. |
 
 ### Login
 
@@ -103,9 +104,45 @@ an und bleibt auf dem Gerät 180 Tage angemeldet. Alle angemeldeten Spieler habe
 ### Backup
 
 ```bash
+# auf dem Server zusätzlich -f docker-compose.prod.yml angeben
 docker compose exec golfapp python -c "import sqlite3; s=sqlite3.connect('/data/golf.sqlite'); s.backup(sqlite3.connect('/data/backup.sqlite'))"
-docker compose cp golfapp:/data/backup.sqlite ./backup.sqlite
+docker compose cp golfapp:/data/backup.sqlite ./backup-$(date +%F).sqlite
 ```
+
+### Online-Betrieb hinter Traefik
+
+`docker-compose.prod.yml` hängt die App in das Docker-Netzwerk von Traefik (Standard `web`),
+veröffentlicht keinen Port, holt per Let's Encrypt ein Zertifikat und leitet HTTP auf HTTPS um.
+
+Voraussetzung: Der DNS-Eintrag (A/AAAA) der Domain zeigt auf den Server.
+
+**Erstinstallation** (Beispiel mit `/opt/docker/golfapp`):
+
+```bash
+cd /opt/docker
+git clone https://github.com/huggi69/golfapp.git   # privates Repo: Deploy-Key oder Token nötig
+cd golfapp
+cp .env.example .env
+# Namen der Entrypoints und des Certresolvers in der Traefik-Konfiguration nachsehen
+# und in .env eintragen, falls sie nicht websecure / web / letsencrypt heißen:
+grep -n -A3 -E "entryPoints|certificatesResolvers" /opt/docker/traefik/traefik.y*ml
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs -f      # Start prüfen, Strg+C beendet die Anzeige
+```
+
+Danach `https://<DOMAIN>` aufrufen und den ersten Zugang anlegen. Wer die alte Historie
+übernehmen will, importiert sie **vorher** (siehe unten) – dann legt man beim ersten Login
+direkt den Zugang für den importierten Spieler an.
+
+**Update:**
+
+```bash
+cd /opt/docker/golfapp
+git pull
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Datenbank und `secret_key` liegen im Volume `golfapp_golf-data` und bleiben bei Updates erhalten.
 
 ### Historie aus der alten App importieren
 
@@ -113,9 +150,9 @@ Der MySQL-Dump der alten App (Tabellen `golf_games`, `golf_holes`, `golf_players
 `golf_season`, z.B. aus TablePlus exportiert) lässt sich direkt importieren:
 
 ```bash
-# Mit Docker
-docker compose cp golf.sql golfapp:/data/golf.sql
-docker compose exec golfapp python -m golfapp.legacy_import /data/golf.sql
+# Mit Docker (auf dem Server zusätzlich -f docker-compose.prod.yml angeben)
+docker compose cp golf.sql golfapp:/tmp/golf.sql
+docker compose exec golfapp python -m golfapp.legacy_import /tmp/golf.sql
 
 # Ohne Docker
 python -m golfapp.legacy_import golf.sql

@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import db
 
@@ -43,11 +44,17 @@ def create_app(test_config=None):
         PERMANENT_SESSION_LIFETIME=timedelta(days=180),
         SESSION_COOKIE_SAMESITE="Lax",  # schützt Formulare vor Aufrufen von fremden Seiten
         SESSION_COOKIE_SECURE=_env_flag("SESSION_COOKIE_SECURE", False),
+        # Läuft die App hinter einem Reverse Proxy (Traefik)? Dann X-Forwarded-* auswerten.
+        TRUST_PROXY=_env_flag("TRUST_PROXY", False),
     )
     if test_config:
         app.config.update(test_config)
     if not app.config.get("SECRET_KEY"):
         app.config["SECRET_KEY"] = _secret_key(app.config["DATABASE"])
+
+    if app.config["TRUST_PROXY"]:
+        # Genau ein Proxy davor: Protokoll (https), Host und Client-IP von dort übernehmen
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     db.init_db(app)
 

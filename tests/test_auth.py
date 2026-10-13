@@ -83,3 +83,18 @@ def test_secret_key_is_persisted(tmp_path, monkeypatch):
     b = create_app({"DATABASE": str(tmp_path / "db.sqlite")})
     assert a.config["SECRET_KEY"] == b.config["SECRET_KEY"]
     assert (tmp_path / "secret_key").exists()
+
+
+
+def test_proxy_headers_only_trusted_when_enabled(tmp_path, monkeypatch):
+    from flask import request
+
+    from golfapp import auth
+
+    monkeypatch.setattr(auth, "PUBLIC_ENDPOINTS", auth.PUBLIC_ENDPOINTS | {"probe"})
+    headers = {"X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.7"}
+    for trust, expected in ((False, ("http", "127.0.0.1")), (True, ("https", "203.0.113.7"))):
+        app = make_app(tmp_path, TRUST_PROXY=trust)
+        app.add_url_rule("/_probe", "probe", lambda: f"{request.scheme} {request.remote_addr}")
+        body = app.test_client().get("/_probe", headers=headers).get_data(as_text=True)
+        assert body == " ".join(expected)
