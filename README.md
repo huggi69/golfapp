@@ -153,6 +153,7 @@ Der MySQL-Dump der alten App (Tabellen `golf_games`, `golf_holes`, `golf_players
 # Mit Docker (auf dem Server zusätzlich -f docker-compose.prod.yml angeben)
 docker compose cp golf.sql golfapp:/tmp/golf.sql
 docker compose exec golfapp python -m golfapp.legacy_import /tmp/golf.sql
+docker compose exec -u root golfapp rm -f /tmp/golf.sql   # Dump danach wieder löschen
 
 # Ohne Docker
 python -m golfapp.legacy_import golf.sql
@@ -165,6 +166,12 @@ python -m golfapp.legacy_import golf.sql
   „unbekannt“ und lassen sich in der Runde nachtragen. Löcher mit 0 Schlägen gelten als nicht gespielt.
 * Bereits importierte Spiele (Notiz „Import alte App, Spiel …“) werden übersprungen –
   der Import kann also gefahrlos erneut laufen.
+
+### Plätze übertragen
+
+Unter **Plätze → Übertragen** lassen sich alle Plätze samt Abschlägen als JSON-Datei exportieren
+und in einer anderen Installation wieder importieren (z.B. vom eigenen Rechner auf den Server).
+Gleichnamige Plätze werden dabei aktualisiert, nicht doppelt angelegt.
 
 ## Bedienung
 

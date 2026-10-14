@@ -158,3 +158,38 @@ def test_play_mode_saves_hole_by_hole(client):
     # Ohne Lochangabe startet die Maske beim ersten offenen Loch
     assert "let current = 3;" in client.get(f"/rounds/{rid}/play").get_data(as_text=True)
     assert client.post(f"/rounds/{rid}/holes/99", json={}).status_code == 404
+
+
+def test_courses_export_and_import(client, tmp_path):
+    import io
+    import json
+
+    from conftest import make_app
+
+    client.post("/courses", data={"name": "GC Grevenmühle", "pars": "4,4,3,5,4,4,3,4,5",
+                                  "stroke_index": "1,3,5,7,9,11,13,15,17"})
+    client.post("/courses/1", data={"action": "add_tee", "tee_name": "Gelb Herren",
+                                    "course_rating": "35,4", "slope": "128"})
+    r = client.get("/courses/export")
+    assert "attachment" in r.headers["Content-Disposition"]
+    exported = r.get_json()
+    assert exported["courses"][0]["tees"] == [{"name": "Gelb Herren", "course_rating": 35.4, "slope": 128}]
+
+    # Zweite Installation ("Server"): ein gleichnamiger Platz mit alten Werten existiert schon
+    other = make_app(tmp_path / "server").test_client()
+    other.post("/login", data={"name": "Huggi", "password": "geheim1", "password2": "geheim1"})
+    other.post("/courses", data={"name": "gc grevenmühle", "pars": "4,4,4,4,4,4,4,4,4"})
+    exported["courses"].append({"name": "Kaputt", "pars": [9]})
+    r = other.post("/courses/import", data={
+        "file": (io.BytesIO(json.dumps(exported).encode()), "plaetze.json")}, follow_redirects=True)
+    page = r.get_data(as_text=True)
+    assert "0 Platz/Plätze neu, 1 aktualisiert" in page
+    assert "„Kaputt“: Name oder Par-Werte ungültig" in page
+    again = other.get("/courses/export").get_json()["courses"]
+    assert again == [{"name": "gc grevenmühle", "pars": [4, 4, 3, 5, 4, 4, 3, 4, 5],
+                      "stroke_index": [1, 3, 5, 7, 9, 11, 13, 15, 17],
+                      "tees": [{"name": "Gelb Herren", "course_rating": 35.4, "slope": 128}]}]
+
+    r = other.post("/courses/import", data={"file": (io.BytesIO(b"kein json"), "x.json")},
+                   follow_redirects=True)
+    assert "keine gültige Plätze-Datei" in r.get_data(as_text=True)
