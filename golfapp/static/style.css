@@ -33,6 +33,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }  /* sonst überschreiben z.B. .button oder .play-card das hidden-Attribut */
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -251,3 +252,5 @@ input[type=file] { max-width: 100%; min-width: 0; flex: 1 1 160px; }
 .voice-text { font-size: .85rem; color: var(--muted); }
 .voice-text.ok { color: var(--text); }
 .voice-text.warn { color: var(--gold); }
+.voice-form { display: flex; gap: 6px; }
+.voice-form input { flex: 1; min-width: 0; font-size: 1rem; padding: 10px; }

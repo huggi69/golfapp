@@ -45,4 +45,6 @@ def test_play_page_includes_voice(client):
         "round_type": "normal", "match_basis": "gross", "players": ["1", "2"]})
     page = client.get(resp.headers["Location"]).get_data(as_text=True)
     assert "voice.js" in page and 'id="voice-btn"' in page
+    # Textfeld (tippen / Tastatur-Diktat) als Weg für Browser ohne Spracherkennung
+    assert 'id="voice-form"' in page and 'placeholder="Ben 5 1, Anna 4 2"' in page
     assert "„Ben 5 1, Anna 4 2“" in page
