@@ -189,6 +189,9 @@ Gleichnamige Plätze werden dabei aktualisiert, nicht doppelt angelegt.
    **Spracheingabe:** Auf „🎤 Ansagen“ tippen und z.B. „Franky 5 1, Huggi 4 2“ sagen
    (Name, Schläge, Putts; ohne automatische Berechnung optional als dritte Zahl die Nettopunkte).
    Nutzt die Spracherkennung des Browsers (Chrome/Android, Safari/iOS) und braucht HTTPS sowie Netz.
+   Auf dem iPhone erlaubt Apple das nur in Safari (Diktierfunktion muss in den iOS-Einstellungen
+   aktiv sein). In Chrome & Co. auf dem iPhone stattdessen ins Ansage-Feld tippen und mit dem
+   🎙 der Tastatur diktieren – die Ansage wird genauso ausgewertet.
 5. Das **Dashboard** zeigt Jahres- und Final-Four-Stand sowie die Ergebnisse jeder Runde.
 
 ## Entwicklung

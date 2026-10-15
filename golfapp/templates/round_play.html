@@ -13,8 +13,13 @@
 
   <nav class="hole-strip" id="hole-strip" aria-label="Loch wählen"></nav>
 
-  <section class="play-card voice-card" id="voice-card" hidden>
-    <button type="button" class="button voice-btn" id="voice-btn">🎤 Ansagen</button>
+  <section class="play-card voice-card" id="voice-card">
+    <button type="button" class="button voice-btn" id="voice-btn" hidden>🎤 Ansagen</button>
+    <form class="voice-form" id="voice-form" autocomplete="off">
+      <input id="voice-input" enterkeyhint="done" aria-label="Ansage tippen oder über das Tastatur-Mikrofon diktieren"
+             placeholder="{{ players[1].name if players|length > 1 else 'Franky' }} 5 1, {{ players[0].name if players else 'Huggi' }} 4 2">
+      <button class="button button-ghost">Übernehmen</button>
+    </form>
     <div class="voice-text" id="voice-text" aria-live="polite">
       z.B. „{{ players[1].name if players|length > 1 else 'Franky' }} 5 1, {{ players[0].name if players else 'Huggi' }} 4 2“ – Name, Schläge, Putts{% if not auto_net %}
       (optional als dritte Zahl die Nettopunkte){% endif %}
@@ -324,10 +329,55 @@
   });
 
   // ---- Spracheingabe ("Franky 5 1, Huggi 4 2") -------------------------------
+  // Zwei Wege mit derselben Auswertung (static/voice.js):
+  //  1. Knopf "Ansagen": Spracherkennung des Browsers (Chrome/Android, Safari/iOS)
+  //  2. Textfeld: tippen oder über das Mikrofon der Handy-Tastatur diktieren – geht in jedem
+  //     Browser, z.B. auch in Chrome auf dem iPhone, wo Apple die Spracherkennung sperrt.
+  const out = $('voice-text');
+
+  function applyVoice(texts) {
+    // Unter mehreren Erkennungs-Alternativen die nehmen, aus der die meisten Spieler erkannt werden
+    let best = { results: [] }, bestText = texts[0] || '';
+    for (const t of texts) {
+      const parsed = Voice.parseVoice(t, state.players);
+      if (parsed.results.length > best.results.length) { best = parsed; bestText = t; }
+    }
+    if (!best.results.length) {
+      out.textContent = `Nicht verstanden: „${bestText}“ – bitte z.B. „Name 5 1“.`;
+      out.className = 'voice-text warn';
+      return false;
+    }
+    best.results.forEach(r => {
+      const s = sc(r.player.id, current);
+      s.strokes = r.strokes;
+      if (r.putts !== undefined) s.putts = r.putts;
+      if (!state.round.auto_net && r.net !== undefined) s.net_points = r.net;
+    });
+    const summary = best.results.map(r =>
+      `${esc(r.player.name)} ${r.strokes}${r.putts !== undefined ? '/' + r.putts : ' (Putts fehlen)'}` +
+      (!state.round.auto_net && r.net !== undefined ? ` · ${r.net} Pkt` : '')).join(' · ');
+    const missing = state.players.filter(p => !best.results.some(r => r.player.id === p.id));
+    out.innerHTML = `„${esc(bestText)}“<br><strong>Loch ${current}: ${summary}</strong>` +
+      (missing.length ? `<br>Nicht erkannt: ${missing.map(p => esc(p.name)).join(', ')}` : '');
+    out.className = 'voice-text ok';
+    changed();
+    return true;
+  }
+
+  $('voice-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('voice-input');
+    if (input.value.trim() && applyVoice([input.value])) input.value = '';
+    input.blur();  // Tastatur schließen
+  });
+
+  // Auf dem iPhone/iPad erlaubt Apple die Spracherkennung nur in Safari; andere Browser
+  // (Chrome, Firefox, Edge …) melden "service-not-allowed". Dort gleich das Textfeld anbieten.
+  const iosOtherBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(navigator.userAgent);
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (Recognition) {
-    $('voice-card').hidden = false;
-    const btn = $('voice-btn'), out = $('voice-text');
+  if (Recognition && !iosOtherBrowser) {
+    const btn = $('voice-btn');
+    btn.hidden = false;
     let rec = null;
 
     function stopListening() {
@@ -345,39 +395,12 @@
       btn.classList.add('listening');
       btn.textContent = '● Höre zu … (tippen zum Beenden)';
       out.textContent = '';
-
-      rec.onresult = event => {
-        // Unter den Alternativen die nehmen, aus der die meisten Spieler erkannt werden
-        const texts = [...event.results[0]].map(a => a.transcript);
-        let best = { results: [] }, bestText = texts[0] || '';
-        for (const t of texts) {
-          const parsed = Voice.parseVoice(t, state.players);
-          if (parsed.results.length > best.results.length) { best = parsed; bestText = t; }
-        }
-        if (!best.results.length) {
-          out.textContent = `Nicht verstanden: „${bestText}“ – bitte z.B. „Name 5 1“ sagen.`;
-          out.className = 'voice-text warn';
-          return;
-        }
-        best.results.forEach(r => {
-          const s = sc(r.player.id, current);
-          s.strokes = r.strokes;
-          if (r.putts !== undefined) s.putts = r.putts;
-          if (!state.round.auto_net && r.net !== undefined) s.net_points = r.net;
-        });
-        const summary = best.results.map(r =>
-          `${esc(r.player.name)} ${r.strokes}${r.putts !== undefined ? '/' + r.putts : ' (Putts fehlen)'}` +
-          (!state.round.auto_net && r.net !== undefined ? ` · ${r.net} Pkt` : '')).join(' · ');
-        const missing = state.players.filter(p => !best.results.some(r => r.player.id === p.id));
-        out.innerHTML = `„${esc(bestText)}“<br><strong>Loch ${current}: ${summary}</strong>` +
-          (missing.length ? `<br>Nicht erkannt: ${missing.map(p => esc(p.name)).join(', ')}` : '');
-        out.className = 'voice-text ok';
-        changed();
-      };
+      rec.onresult = event => applyVoice([...event.results[0]].map(a => a.transcript));
       rec.onerror = event => {
         const messages = {
           'not-allowed': 'Mikrofon nicht erlaubt – bitte in den Browser-Einstellungen freigeben.',
-          'service-not-allowed': 'Spracherkennung ist in diesem Browser nicht freigegeben.',
+          'service-not-allowed': 'Spracherkennung hier nicht verfügbar (auf dem iPhone: Diktierfunktion ' +
+            'in den iOS-Einstellungen aktivieren). Alternativ im Feld oben über das 🎙 der Tastatur diktieren.',
           'no-speech': 'Nichts gehört – bitte nochmal versuchen.',
           'network': 'Für die Spracherkennung wird eine Internetverbindung benötigt.',
         };
@@ -387,6 +410,9 @@
       rec.onend = stopListening;
       try { rec.start(); } catch (e) { stopListening(); }
     });
+  } else if (iosOtherBrowser) {
+    out.insertAdjacentHTML('beforeend',
+      '<br>Tipp: Ins Feld tippen und das 🎙 der Tastatur zum Diktieren nutzen.');
   }
 
   if (holeIndex(current) < 0) current = state.holes[0].hole;
