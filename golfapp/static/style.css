@@ -242,3 +242,12 @@ h3 { font-size: 1rem; margin: 1.2em 0 .5em; }
 .player-card.inactive { opacity: .6; }
 form.inline { max-width: 100%; }
 input[type=file] { max-width: 100%; min-width: 0; flex: 1 1 160px; }
+
+/* Spracheingabe */
+.voice-card { display: flex; flex-direction: column; gap: 8px; }
+.voice-btn { width: 100%; padding: 14px; font-size: 1.1rem; }
+.voice-btn.listening { background: var(--danger); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .7; } }
+.voice-text { font-size: .85rem; color: var(--muted); }
+.voice-text.ok { color: var(--text); }
+.voice-text.warn { color: var(--gold); }

@@ -13,6 +13,14 @@
 
   <nav class="hole-strip" id="hole-strip" aria-label="Loch wählen"></nav>
 
+  <section class="play-card voice-card" id="voice-card" hidden>
+    <button type="button" class="button voice-btn" id="voice-btn">🎤 Ansagen</button>
+    <div class="voice-text" id="voice-text" aria-live="polite">
+      z.B. „{{ players[1].name if players|length > 1 else 'Franky' }} 5 1, {{ players[0].name if players else 'Huggi' }} 4 2“ – Name, Schläge, Putts{% if not auto_net %}
+      (optional als dritte Zahl die Nettopunkte){% endif %}
+    </div>
+  </section>
+
   <section class="play-card" id="par-card" hidden>
     <div class="play-label">Par für dieses Loch</div>
     <div class="chips" id="par-chips"></div>
@@ -43,6 +51,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='handicap.js') }}"></script>
+<script src="{{ url_for('static', filename='voice.js') }}"></script>
 <script>
 (() => {
   const SAVE_URL = {{ url_for('main.hole_save', round_id=round.id, hole=0)|tojson }}.replace(/0$/, '');
@@ -313,6 +322,72 @@
     if (Object.keys(pending).length) return alert('Noch nicht alles gespeichert – bitte bei Netz erneut versuchen.');
     location.href = VIEW_URL;
   });
+
+  // ---- Spracheingabe ("Franky 5 1, Huggi 4 2") -------------------------------
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (Recognition) {
+    $('voice-card').hidden = false;
+    const btn = $('voice-btn'), out = $('voice-text');
+    let rec = null;
+
+    function stopListening() {
+      btn.classList.remove('listening');
+      btn.textContent = '🎤 Ansagen';
+      rec = null;
+    }
+
+    btn.addEventListener('click', () => {
+      if (rec) { rec.stop(); return; }
+      rec = new Recognition();
+      rec.lang = 'de-DE';
+      rec.interimResults = false;
+      rec.maxAlternatives = 5;
+      btn.classList.add('listening');
+      btn.textContent = '● Höre zu … (tippen zum Beenden)';
+      out.textContent = '';
+
+      rec.onresult = event => {
+        // Unter den Alternativen die nehmen, aus der die meisten Spieler erkannt werden
+        const texts = [...event.results[0]].map(a => a.transcript);
+        let best = { results: [] }, bestText = texts[0] || '';
+        for (const t of texts) {
+          const parsed = Voice.parseVoice(t, state.players);
+          if (parsed.results.length > best.results.length) { best = parsed; bestText = t; }
+        }
+        if (!best.results.length) {
+          out.textContent = `Nicht verstanden: „${bestText}“ – bitte z.B. „Name 5 1“ sagen.`;
+          out.className = 'voice-text warn';
+          return;
+        }
+        best.results.forEach(r => {
+          const s = sc(r.player.id, current);
+          s.strokes = r.strokes;
+          if (r.putts !== undefined) s.putts = r.putts;
+          if (!state.round.auto_net && r.net !== undefined) s.net_points = r.net;
+        });
+        const summary = best.results.map(r =>
+          `${esc(r.player.name)} ${r.strokes}${r.putts !== undefined ? '/' + r.putts : ' (Putts fehlen)'}` +
+          (!state.round.auto_net && r.net !== undefined ? ` · ${r.net} Pkt` : '')).join(' · ');
+        const missing = state.players.filter(p => !best.results.some(r => r.player.id === p.id));
+        out.innerHTML = `„${esc(bestText)}“<br><strong>Loch ${current}: ${summary}</strong>` +
+          (missing.length ? `<br>Nicht erkannt: ${missing.map(p => esc(p.name)).join(', ')}` : '');
+        out.className = 'voice-text ok';
+        changed();
+      };
+      rec.onerror = event => {
+        const messages = {
+          'not-allowed': 'Mikrofon nicht erlaubt – bitte in den Browser-Einstellungen freigeben.',
+          'service-not-allowed': 'Spracherkennung ist in diesem Browser nicht freigegeben.',
+          'no-speech': 'Nichts gehört – bitte nochmal versuchen.',
+          'network': 'Für die Spracherkennung wird eine Internetverbindung benötigt.',
+        };
+        out.textContent = messages[event.error] || `Spracherkennung fehlgeschlagen (${event.error}).`;
+        out.className = 'voice-text warn';
+      };
+      rec.onend = stopListening;
+      try { rec.start(); } catch (e) { stopListening(); }
+    });
+  }
 
   if (holeIndex(current) < 0) current = state.holes[0].hole;
   render();

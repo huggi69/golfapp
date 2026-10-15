@@ -186,6 +186,9 @@ Gleichnamige Plätze werden dabei aktualisiert, nicht doppelt angelegt.
    −/+), bei Par 3 den NTP-Sieger wählen. Nettopunkte und Zwischenstand (inkl. Lochspiel)
    rechnen live mit. Jede Eingabe wird sofort gespeichert; ohne Netz bleibt sie auf dem Handy und
    wird automatisch nachgesendet. Die **Tabellenansicht** bleibt für Korrekturen am Rechner.
+   **Spracheingabe:** Auf „🎤 Ansagen“ tippen und z.B. „Franky 5 1, Huggi 4 2“ sagen
+   (Name, Schläge, Putts; ohne automatische Berechnung optional als dritte Zahl die Nettopunkte).
+   Nutzt die Spracherkennung des Browsers (Chrome/Android, Safari/iOS) und braucht HTTPS sowie Netz.
 5. Das **Dashboard** zeigt Jahres- und Final-Four-Stand sowie die Ergebnisse jeder Runde.
 
 ## Entwicklung
