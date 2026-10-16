@@ -752,10 +752,26 @@ def courses():
     db = get_db()
     if request.method == "POST":
         course_id = _save_course_fields(db, request.form)
-        if course_id is not None:
+        if course_id is None:
+            return redirect(url_for("main.courses"))
+        # Abschläge aus der Platzsuche (handicap.report), vom Browser als JSON mitgeschickt
+        try:
+            tees = json.loads(request.form.get("tees_json") or "[]")
+        except ValueError:
+            tees = []
+        errors = []
+        added = sum(
+            upsert_tee(db, course_id, t, errors, request.form.get("name", ""))
+            for t in (tees if isinstance(tees, list) else [])
+        )
+        db.commit()
+        for e in errors:
+            flash(e, "warn")
+        if added:
+            flash(f"Platz mit {added} Abschlägen angelegt – bitte kurz prüfen.", "ok")
+        else:
             flash("Platz angelegt – jetzt die Abschläge mit Course Rating und Slope eintragen.", "ok")
-            return redirect(url_for("main.course_edit", course_id=course_id))
-        return redirect(url_for("main.courses"))
+        return redirect(url_for("main.course_edit", course_id=course_id))
 
     rows = db.execute(
         "SELECT c.*, (SELECT COUNT(*) FROM course_tees t WHERE t.course_id = c.id) AS n_tees "
@@ -823,27 +839,33 @@ def import_courses(db, data):
             ).lastrowid
             created += 1
         for tee in entry.get("tees") or []:
-            if not isinstance(tee, dict):
-                continue
-            tee_name = " ".join(str(tee.get("name", "")).split())
-            cr = tee.get("course_rating")
-            slope = tee.get("slope")
-            valid = (
-                tee_name
-                and isinstance(cr, (int, float)) and 20 <= cr <= 90
-                and isinstance(slope, int) and 55 <= slope <= 155
-            )
-            if not valid:
-                errors.append(f"„{name}“: Abschlag „{tee_name or '?'}“ ungültig – übersprungen")
-                continue
-            db.execute(
-                "INSERT INTO course_tees (course_id, name, course_rating, slope) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(course_id, name) DO UPDATE SET "
-                "course_rating = excluded.course_rating, slope = excluded.slope",
-                (course_id, tee_name, float(cr), slope),
-            )
+            upsert_tee(db, course_id, tee, errors, name)
     db.commit()
     return created, updated, errors
+
+
+def upsert_tee(db, course_id, tee, errors, course_name):
+    """Legt einen Abschlag {name, course_rating, slope} an oder aktualisiert ihn (ohne commit)."""
+    if not isinstance(tee, dict):
+        return False
+    tee_name = " ".join(str(tee.get("name", "")).split())
+    cr = tee.get("course_rating")
+    slope = tee.get("slope")
+    valid = (
+        tee_name
+        and isinstance(cr, (int, float)) and not isinstance(cr, bool) and 20 <= cr <= 90
+        and isinstance(slope, int) and not isinstance(slope, bool) and 55 <= slope <= 155
+    )
+    if not valid:
+        errors.append(f"„{course_name}“: Abschlag „{tee_name or '?'}“ ungültig – übersprungen")
+        return False
+    db.execute(
+        "INSERT INTO course_tees (course_id, name, course_rating, slope) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(course_id, name) DO UPDATE SET "
+        "course_rating = excluded.course_rating, slope = excluded.slope",
+        (course_id, tee_name, float(cr), slope),
+    )
+    return True
 
 
 @bp.route("/courses/import", methods=["POST"])

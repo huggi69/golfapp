@@ -193,3 +193,27 @@ def test_courses_export_and_import(client, tmp_path):
     r = other.post("/courses/import", data={"file": (io.BytesIO(b"kein json"), "x.json")},
                    follow_redirects=True)
     assert "keine gültige Plätze-Datei" in r.get_data(as_text=True)
+
+
+def test_course_created_with_tees_from_search(client):
+    import json
+    import sqlite3
+
+    tees = [{"name": "Gelb Herren", "course_rating": 73.6, "slope": 138},
+            {"name": "Rot Damen", "course_rating": 75.6, "slope": 132},
+            {"name": "Kaputt", "course_rating": "x", "slope": 999}]
+    r = client.post("/courses", data={
+        "name": "Golfclub Niep – 18-Loch-Meisterschaftsplatz",
+        "pars": "4,4,3,5,4,4,3,4,5,4,4,3,5,4,4,3,4,5",
+        "stroke_index": "3,11,15,1,5,13,17,9,7,4,12,16,2,6,14,18,10,8",
+        "tees_json": json.dumps(tees)}, follow_redirects=True)
+    page = r.get_data(as_text=True)
+    assert "Platz mit 2 Abschlägen angelegt" in page
+    assert "Abschlag „Kaputt“ ungültig" in page
+    db = sqlite3.connect(client.application.config["DATABASE"])
+    assert db.execute("SELECT name, course_rating, slope FROM course_tees ORDER BY name").fetchall() == [
+        ("Gelb Herren", 73.6, 138), ("Rot Damen", 75.6, 132)]
+
+    # Ohne Suche (kein tees_json) wie bisher
+    r = client.post("/courses", data={"name": "Ohne", "pars": "4,4,4,4,4,4,4,4,4"}, follow_redirects=True)
+    assert "jetzt die Abschläge" in r.get_data(as_text=True)

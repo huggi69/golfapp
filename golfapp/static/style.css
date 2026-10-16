@@ -254,3 +254,13 @@ input[type=file] { max-width: 100%; min-width: 0; flex: 1 1 160px; }
 .voice-text.warn { color: var(--gold); }
 .voice-form { display: flex; gap: 6px; }
 .voice-form input { flex: 1; min-width: 0; font-size: 1rem; padding: 10px; }
+
+/* Platzsuche handicap.report */
+.hr-results { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.hr-result {
+  text-align: left; display: flex; flex-direction: column; gap: 2px; cursor: pointer;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+}
+.hr-result:hover { border-color: var(--accent); }
+.hr-info.ok { color: var(--accent); }
+.hr-info.warn { color: var(--gold); }
