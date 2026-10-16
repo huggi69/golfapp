@@ -47,6 +47,12 @@ wird im Browser verkleinert, auf dem Server von Claude (`claude-opus-5-5`) ausge
 Par, Handicap-Reihenfolge und – falls aufgedruckt – Course Rating/Slope ins Formular. Kosten:
 wenige Cent pro Foto über das eigene Anthropic-Konto. Ohne Schlüssel bleibt der Knopf ausgeblendet.
 
+**Beides kombinieren:** Foto und Platzsuche lassen sich in beliebiger Reihenfolge nutzen. Par und
+Handicap-Reihenfolge kommen dann vom Foto, Course Rating und Slope der Abschläge von
+handicap.report. Nach dem Foto sucht die App den erkannten Club automatisch bei handicap.report;
+man tippt nur noch den passenden Platz an. Weichen die Par-Summen von Karte und API ab, gibt es
+einen Hinweis.
+
 ### Saison & Final Four
 
 * Eine Saison läuft vom 01.01. bis 31.12. – das Jahr ergibt sich aus dem Rundendatum.
