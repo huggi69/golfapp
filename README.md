@@ -36,8 +36,10 @@ Handicap-Reihenfolge der Löcher bekannt, berechnet die App die Nettopunkte auto
 Fehlt eine dieser Angaben, werden die Nettopunkte wie bisher von Hand eingetragen.
 
 Course Rating, Slope und Handicap-Reihenfolge stehen auf der Scorekarte bzw. der Vorgabentabelle
-des Clubs. Eine frei nutzbare Datenbank für deutsche Plätze gibt es nicht – die Werte werden
-deshalb einmal je Platz unter **Plätze** eingetragen.
+des Clubs. Beim Anlegen eines Platzes unter **Plätze** lassen sie sich über die Suche aus der
+offenen API von [handicap.report](https://handicap.report/api/) übernehmen (850+ deutsche Plätze:
+Par und Stroke-Index je Loch, Course Rating und Slope je Abschlag und Geschlecht). Die Abfrage
+läuft direkt im Browser; vor dem Speichern lassen sich alle Werte prüfen und anpassen.
 
 ### Saison & Final Four
 
