@@ -12,16 +12,50 @@
     info.className = 'hr-info ' + (cls || '');
   }
 
+  // Beide Quellen lassen sich kombinieren, in beliebiger Reihenfolge. Je Feld gilt:
+  //   Löcher (Par, Hcp-Reihenfolge): Foto vor API – die Karte zeigt den gespielten Platz genau
+  //   Abschläge (CR, Slope):         API vor Foto – handicap.report pflegt die offiziellen Werte
+  //   Name:                          API vor Foto
+  const RANK = { holes: { foto: 2, api: 1 }, tees: { api: 2, foto: 1 }, name: { api: 2, foto: 1 } };
+  const LABEL = { foto: 'Foto', api: 'handicap.report' };
+  let filled = {};       // Feld -> Quelle, die es zuletzt gefüllt hat
+  let teesPar = null;    // Par laut API-Abschlag, zum Abgleich mit der Karte
+  const wins = (field, source) => !filled[field] || RANK[field][source] >= RANK[field][filled[field]];
+
   // Gemeinsames Füllen: {name, pars: [..]|null, stroke_index: [..]|null,
   //   tees: [{name, course_rating, slope, par?, unsicher?}], warnings: [..]}
-  function fillForm(data) {
+  function fillForm(data, source) {
     const warnings = [...(data.warnings || [])];
-    if (data.name) $('new-name').value = data.name;
-    if (data.pars) $('new-pars').value = data.pars.join(',');
-    $('new-si').value = data.stroke_index ? data.stroke_index.join(',') : '';
+    if (data.name && wins('name', source)) { $('new-name').value = data.name; filled.name = source; }
+    if (data.pars && wins('holes', source)) {
+      $('new-pars').value = data.pars.join(',');
+      $('new-si').value = data.stroke_index ? data.stroke_index.join(',') : '';
+      filled.holes = source;
+    }
 
     const tees = data.tees || [];
-    $('new-tees').value = JSON.stringify(tees.map(({ name, course_rating, slope }) => ({ name, course_rating, slope })));
+    if (tees.length && wins('tees', source)) {
+      $('new-tees').value = JSON.stringify(tees.map(({ name, course_rating, slope }) => ({ name, course_rating, slope })));
+      filled.tees = source;
+      if (source === 'api') teesPar = (tees.find(t => t.par) || {}).par || null;
+      renderTees(tees);
+    }
+    if (!filled.tees) warnings.push('Keine Abschläge mit Course Rating und Slope – Platz oben suchen oder nach dem Speichern ergänzen.');
+
+    // Passt der gewählte API-Platz zur fotografierten Karte?
+    const parSum = $('new-pars').value.split(',').map(Number).reduce((a, b) => a + b, 0);
+    if (filled.holes === 'foto' && filled.tees === 'api' && teesPar && parSum && teesPar !== parSum) {
+      warnings.push(`Achtung: Par laut Karte ${parSum}, laut handicap.report ${teesPar} – richtigen Platz gewählt?`);
+    }
+    const origin = ['holes', 'tees'].filter(f => filled[f])
+      .map(f => `${f === 'holes' ? 'Löcher' : 'Abschläge'}: ${LABEL[filled[f]]}`).join(' · ');
+    message((origin ? origin + '. ' : '') +
+      (warnings.length ? warnings.join(' ') : 'Bitte prüfen und „Hinzufügen“ tippen.'),
+      warnings.length ? 'warn' : 'ok');
+    $('new-name').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function renderTees(tees) {
     const preview = $('hr-tees');
     preview.innerHTML = '';
     if (tees.length) {
@@ -36,17 +70,14 @@
           (t.par ? ` · Par ${t.par}` : '') + (t.unsicher ? ' · ungeprüft' : '');
         preview.appendChild(row);
       });
-    } else {
-      warnings.push('Keine Abschläge mit Course Rating und Slope gefunden – nach dem Speichern von Hand ergänzen.');
     }
-    message(warnings.length ? warnings.join(' ') : 'Übernommen – bitte prüfen und „Hinzufügen“ tippen.',
-      warnings.length ? 'warn' : 'ok');
-    $('new-name').scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   $('hr-reset').addEventListener('click', () => {
     $('new-tees').value = '';
     $('hr-tees').innerHTML = '';
+    filled = {};
+    teesPar = null;
     message('');
   });
 
@@ -121,6 +152,8 @@
       warnings.push(`Keine Lochdaten für ${c.holeCount || '?'} Loch – Par bitte von der Scorekarte eintragen.`);
     }
     list.innerHTML = '';
+    // Löcher aus dem Foto bleiben stehen – dann sind fehlende Lochdaten der API kein Problem
+    if (filled.holes === 'foto') warnings.length = 0;
     fillForm({
       name: [c.club, c.courseName].filter(Boolean).join(' – '),
       pars, stroke_index: si, warnings,
@@ -128,7 +161,26 @@
         name: [t.name, genderLabel(t.gender)].filter(Boolean).join(' '),
         course_rating: t.cr, slope: t.slope, par: t.par, unsicher: !!t.unsicher,
       })),
-    });
+    }, 'api');
+  }
+
+  // Nach dem Foto: Club bei handicap.report suchen. Namen auf Karten sind oft lang
+  // ("Golfclub Grevenmühle e.V.") – ohne Treffer mit dem prägnantesten Wort erneut suchen.
+  async function suggestTees(name, scanText, scanClass) {
+    const GENERIC = /^(golf|club|golfclub|golfplatz|gc|gut|e\.?v\.?|und|am|an|der|die|das|von)$/i;
+    const keyword = name.split(/[\s,–-]+/).filter(w => w.length >= 4 && !GENERIC.test(w))
+      .sort((a, b) => b.length - a.length)[0];
+    for (const q of [name, keyword].filter(Boolean)) {
+      input.value = q;
+      await search(q);
+      if (list.children.length) break;
+    }
+    const hint = list.children.length
+      ? ' Für die Abschläge den passenden Platz unten antippen.'
+      : ' Platz bei handicap.report nicht gefunden – Suchbegriff oben anpassen.';
+    message(scanText + hint, scanClass.replace('hr-info', '').trim());
+    // Treffer stehen über dem Formular – dorthin scrollen, damit man den Platz gleich antippen kann
+    if (list.children.length) info.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   // ---- 2. Foto der Scorekarte ------------------------------------------------
@@ -164,7 +216,9 @@
         message(data.error || (res.status === 401 ? 'Bitte neu anmelden.' : `Fehler ${res.status}`), 'warn');
         return;
       }
-      fillForm(data);
+      fillForm(data, 'foto');
+      // Für die offiziellen Abschläge gleich den erkannten Club bei handicap.report suchen
+      if (data.name && filled.tees !== 'api') suggestTees(data.name, info.textContent, info.className);
     } catch (e) {
       message('Foto konnte nicht gesendet werden – Internetverbindung prüfen.', 'warn');
     } finally {
