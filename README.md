@@ -41,6 +41,12 @@ offenen API von [handicap.report](https://handicap.report/api/) übernehmen (850
 Par und Stroke-Index je Loch, Course Rating und Slope je Abschlag und Geschlecht). Die Abfrage
 läuft direkt im Browser; vor dem Speichern lassen sich alle Werte prüfen und anpassen.
 
+**Scorekarte fotografieren:** Ist auf dem Server `ANTHROPIC_API_KEY` gesetzt (z.B. in `.env`),
+erscheint unter **Plätze → Platz hinzufügen** der Knopf „📷 Scorekarte fotografieren“. Das Foto
+wird im Browser verkleinert, auf dem Server von Claude (`claude-opus-5-5`) ausgelesen und füllt
+Par, Handicap-Reihenfolge und – falls aufgedruckt – Course Rating/Slope ins Formular. Kosten:
+wenige Cent pro Foto über das eigene Anthropic-Konto. Ohne Schlüssel bleibt der Knopf ausgeblendet.
+
 ### Saison & Final Four
 
 * Eine Saison läuft vom 01.01. bis 31.12. – das Jahr ergibt sich aus dem Rundendatum.
@@ -87,6 +93,7 @@ docker run -d -p 8000:8000 -v golf-data:/data --name golfapp golfapp
 | `FINAL_FOUR_IN_ANNUAL` | `false`               | Standard für Saisons ohne eigene Einstellung: Final-Four-Runden zusätzlich in der Jahreswertung zählen |
 | `SECRET_KEY`           | automatisch           | Schlüssel für die Login-Cookies. Ohne Angabe wird er einmalig erzeugt und als `secret_key` neben der Datenbank gespeichert. |
 | `SESSION_COOKIE_SECURE`| `false`               | Auf `true` setzen, wenn die App nur per HTTPS erreichbar ist           |
+| `ANTHROPIC_API_KEY`    | leer                  | Optional: Schlüssel für das Auslesen von Scorekarten-Fotos (Claude). Leer = Funktion ausgeblendet. |
 | `TRUST_PROXY`          | `false`               | `true` hinter einem Reverse Proxy (Traefik): Protokoll und Client-IP aus `X-Forwarded-*` übernehmen. Nur setzen, wenn ein Proxy davor sitzt. |
 
 ### Login

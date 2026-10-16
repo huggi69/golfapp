@@ -15,6 +15,8 @@ services:
       TRUST_PROXY: "true"            # X-Forwarded-* von Traefik auswerten
       SESSION_COOKIE_SECURE: "true"  # Login-Cookie nur über HTTPS
       FINAL_FOUR_IN_ANNUAL: "false"
+      # Optional: Scorekarte per Foto auslesen (Claude). Schlüssel in .env setzen.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - golf-data:/data
     networks:

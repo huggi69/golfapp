@@ -264,3 +264,5 @@ input[type=file] { max-width: 100%; min-width: 0; flex: 1 1 160px; }
 .hr-result:hover { border-color: var(--accent); }
 .hr-info.ok { color: var(--accent); }
 .hr-info.warn { color: var(--gold); }
+.scan-label { text-align: center; cursor: pointer; }
+.scan-label.busy { opacity: .6; pointer-events: none; animation: pulse 1.2s ease-in-out infinite; }

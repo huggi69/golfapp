@@ -7,6 +7,8 @@ services:
     environment:
       # Sollen Final-Four-Runden standardmäßig zur Jahreswertung zählen? (je Saison im Dashboard änderbar)
       FINAL_FOUR_IN_ANNUAL: "false"
+      # Optional: Scorekarte per Foto auslesen (Claude). Schlüssel in .env setzen.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Auf "true" setzen, sobald die App nur noch per HTTPS erreichbar ist
       SESSION_COOKIE_SECURE: "false"
       # SECRET_KEY wird automatisch erzeugt und in /data/secret_key gespeichert.
