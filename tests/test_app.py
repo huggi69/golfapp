@@ -217,3 +217,63 @@ def test_course_created_with_tees_from_search(client):
     # Ohne Suche (kein tees_json) wie bisher
     r = client.post("/courses", data={"name": "Ohne", "pars": "4,4,4,4,4,4,4,4,4"}, follow_redirects=True)
     assert "jetzt die Abschläge" in r.get_data(as_text=True)
+
+
+def test_scorecard_scan(client, monkeypatch):
+    import io
+
+    from golfapp import scorecard
+
+    # Ohne API-Schlüssel: Knopf ausgeblendet, Endpunkt meldet "nicht eingerichtet"
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert 'id="scan-photo"' not in client.get("/courses").get_data(as_text=True)
+    assert client.post("/courses/scan").status_code == 503
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    assert 'id="scan-photo"' in client.get("/courses").get_data(as_text=True)
+    pars = [4, 4, 3, 5, 4, 4, 3, 4, 5]
+    si = [7, 3, 15, 1, 9, 5, 17, 11, 13]
+    seen = {}
+
+    def fake_claude(data, media_type):  # kein echter API-Aufruf im Test
+        seen.update(size=len(data), media_type=media_type)
+        return {
+            "club_name": " GC  Grevenmühle ",
+            "holes": [{"number": i + 1, "par": p, "stroke_index": s} for i, (p, s) in enumerate(zip(pars, si))],
+            "tees": [{"color": "Gelb", "gender": "Herren", "course_rating": 35.44, "slope": 128},
+                     {"color": "Rot", "gender": "Damen", "course_rating": 999, "slope": 128}],
+            "warnings": ["Damen-Hcp ignoriert"],
+        }
+
+    monkeypatch.setattr(scorecard, "ask_claude", fake_claude)
+    r = client.post("/courses/scan", data={"image": (io.BytesIO(b"\xff\xd8fakejpeg"), "s.jpg", "image/jpeg")})
+    assert r.status_code == 200
+    assert r.get_json() == {
+        "name": "GC Grevenmühle", "pars": pars, "stroke_index": si,
+        "tees": [{"name": "Gelb Herren", "course_rating": 35.4, "slope": 128}],  # Rot (CR 999) verworfen
+        "warnings": ["Damen-Hcp ignoriert"],
+    }
+    assert seen == {"size": 10, "media_type": "image/jpeg"}
+
+    # Falsches Format / kein Bild
+    r = client.post("/courses/scan", data={"image": (io.BytesIO(b"x"), "s.txt", "text/plain")})
+    assert r.status_code == 400
+
+    # Fehler der API werden als Meldung durchgereicht
+    def failing(data, media_type):
+        raise scorecard.ScanError("Bilderkennung gerade ausgelastet – bitte gleich nochmal versuchen.")
+    monkeypatch.setattr(scorecard, "ask_claude", failing)
+    r = client.post("/courses/scan", data={"image": (io.BytesIO(b"x"), "s.jpg", "image/jpeg")})
+    assert r.status_code == 502 and "ausgelastet" in r.get_json()["error"]
+
+
+def test_scorecard_normalize_rejects_implausible_values():
+    from golfapp.scorecard import normalize
+
+    holes = [{"number": i + 1, "par": 4, "stroke_index": 1} for i in range(18)]  # SI doppelt
+    holes[3]["par"] = 0  # unlesbar
+    out = normalize({"club_name": "", "holes": holes, "tees": [], "warnings": []})
+    assert out["pars"] is None and out["stroke_index"] is None
+    assert any("Par" in w for w in out["warnings"]) and any("Handicap" in w for w in out["warnings"])
+    out = normalize({"club_name": "", "holes": holes[:12], "tees": [], "warnings": []})
+    assert "12 Löcher erkannt" in out["warnings"][0]

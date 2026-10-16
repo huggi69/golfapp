@@ -46,6 +46,7 @@ def create_app(test_config=None):
         SESSION_COOKIE_SECURE=_env_flag("SESSION_COOKIE_SECURE", False),
         # Läuft die App hinter einem Reverse Proxy (Traefik)? Dann X-Forwarded-* auswerten.
         TRUST_PROXY=_env_flag("TRUST_PROXY", False),
+        MAX_CONTENT_LENGTH=8 * 1024 * 1024,  # Uploads (Scorekarten-Foto, Plätze-Datei)
     )
     if test_config:
         app.config.update(test_config)

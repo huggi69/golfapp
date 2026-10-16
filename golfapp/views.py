@@ -17,6 +17,7 @@ from flask import (
 )
 
 from .auth import hash_password, password_problem
+from . import scorecard
 from .db import get_db
 from .handicap import playing_handicap, stableford_points, strokes_received
 from .scoring import CATEGORIES, evaluate_round, format_points, match_status
@@ -778,7 +779,10 @@ def courses():
         "FROM courses c ORDER BY c.name"
     ).fetchall()
     return render_template(
-        "courses.html", courses=rows, default_pars=",".join(map(str, DEFAULT_PARS))
+        "courses.html",
+        courses=rows,
+        default_pars=",".join(map(str, DEFAULT_PARS)),
+        scan_enabled=scorecard.enabled(),
     )
 
 
@@ -866,6 +870,27 @@ def upsert_tee(db, course_id, tee, errors, course_name):
         (course_id, tee_name, float(cr), slope),
     )
     return True
+
+
+@bp.route("/courses/scan", methods=["POST"])
+def courses_scan():
+    """Foto einer Scorekarte auslesen (Claude) und die Werte fürs Formular zurückgeben."""
+    if not scorecard.enabled():
+        return jsonify(error="Bilderkennung ist nicht eingerichtet (ANTHROPIC_API_KEY fehlt)."), 503
+    upload = request.files.get("image")
+    if upload is None:
+        return jsonify(error="Kein Foto erhalten."), 400
+    media_type = (upload.mimetype or "").lower()
+    if media_type not in scorecard.MEDIA_TYPES:
+        return jsonify(error="Bitte ein Foto im Format JPEG, PNG oder WebP senden."), 400
+    data = upload.read(scorecard.MAX_IMAGE_BYTES + 1)
+    if not data or len(data) > scorecard.MAX_IMAGE_BYTES:
+        return jsonify(error="Das Foto ist zu groß (max. 5 MB)."), 400
+    try:
+        result = scorecard.normalize(scorecard.ask_claude(data, media_type))
+    except scorecard.ScanError as e:
+        return jsonify(error=str(e)), 502
+    return jsonify(result)
 
 
 @bp.route("/courses/import", methods=["POST"])

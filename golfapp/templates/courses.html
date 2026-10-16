@@ -42,6 +42,16 @@
 </section>
 <section class="card">
   <h2>Platz hinzufügen</h2>
+  {% if scan_enabled %}
+  <div class="field">
+    <label class="button button-ghost scan-label" id="scan-label">
+      📷 Scorekarte fotografieren
+      <input type="file" id="scan-photo" accept="image/*" capture="environment" class="sr-only"
+             data-url="{{ url_for('main.courses_scan') }}">
+    </label>
+    <span class="muted small">Par, Handicap-Reihenfolge und – falls aufgedruckt – Course Rating/Slope werden ausgelesen.</span>
+  </div>
+  {% endif %}
   <div class="field">
     <label for="hr-search">Platz suchen (Daten von handicap.report)</label>
     <input id="hr-search" type="search" placeholder="Clubname oder Ort, z.B. Grevenmühle" autocomplete="off">
@@ -61,7 +71,7 @@
     </div>
   </form>
   <p class="muted small">Platzdaten: <a href="https://handicap.report/" target="_blank" rel="noopener">handicap.report</a>
-    (offene API). Werte vor dem Speichern mit der Scorekarte abgleichen.</p>
+    (offene API){% if scan_enabled %}, Foto-Auswertung mit Claude{% endif %}. Werte vor dem Speichern mit der Scorekarte abgleichen.</p>
 </section>
 {% endblock %}
 {% block scripts %}

@@ -20,4 +20,5 @@ HEALTHCHECK --interval=30s --timeout=3s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')" || exit 1
 
 # Ein Worker reicht für zwei Spieler und vermeidet konkurrierende SQLite-Schreibzugriffe.
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "wsgi:app"]
+# --timeout 120: das Auslesen eines Scorekarten-Fotos kann 30–60 s dauern
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "120", "wsgi:app"]
